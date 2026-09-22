@@ -12,6 +12,7 @@ import ImageLoader from '../image/ImageLoader';
 
 import { RendererMessenger } from 'src/ipc/renderer';
 import SearchStore from './SearchStore';
+import { runGpsBackfill } from './GpsBackfill';
 
 // This will throw exceptions whenever we try to modify the state directly without an action
 // Actions will batch state modifications -> better for performance
@@ -117,6 +118,13 @@ class RootStore {
       if (isSlideMode) {
         rootStore.uiStore.enableSlideMode();
       }
+
+      // One-time, low-priority: backfill GPS coordinates for files that haven't been
+      // checked yet (e.g. existing libraries after the lat/lng migration). Runs in the
+      // background; Map View fills in as files complete. Not awaited — must not block startup.
+      runGpsBackfill(rootStore.fileStore.fileList.slice(), rootStore.exifTool).catch((e) =>
+        console.error('GPS backfill failed', e),
+      );
     });
 
     // Then, look for any new or removed images, and refetch if necessary
