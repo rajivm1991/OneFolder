@@ -47,6 +47,7 @@ import { action, makeObservable, observable, runInAction } from 'mobx';
 import exiftool from '@logion/node-exiftool';
 import { IS_WIN } from './process';
 import { getExtraResourcePath } from './fs';
+import { parseGpsCoordinates } from './gps';
 
 // The exif binary is placed using ElectronBuilder's extraResources:
 const exiftoolRunnable = IS_WIN ? 'exiftool.exe' : 'exiftool.pl';
@@ -374,6 +375,7 @@ class ExifIO {
   async getDimensionsAndTags(filepath: string): Promise<{
     dimensions: { width: number; height: number };
     tags: string[][];
+    gps: { lat: number; lng: number } | null;
   }> {
     let metadata: Awaited<ReturnType<typeof ep.readMetadata>> | undefined = undefined;
     try {
@@ -388,6 +390,8 @@ class ExifIO {
         'HierarchicalSubject',
         'Subject',
         'Keywords',
+        'GPSLatitude',
+        'GPSLongitude',
         ...this.extraArgs,
       ]);
 
@@ -425,13 +429,19 @@ class ExifIO {
         runInAction(() => this.hierarchicalSeparator),
       );
 
-      return { dimensions, tags };
+      const gps = parseGpsCoordinates(
+        entry.GPSLatitude?.toString(),
+        entry.GPSLongitude?.toString(),
+      );
+
+      return { dimensions, tags, gps };
     } catch (e) {
       console.error('Could not read image dimensions and tags from', filepath, e, metadata);
       // Return safe defaults on error
       return {
         dimensions: { width: 0, height: 0 },
         tags: [],
+        gps: null,
       };
     }
   }

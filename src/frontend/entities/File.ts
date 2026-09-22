@@ -37,6 +37,9 @@ interface IMetaData {
 interface IExtendedMetaData extends IMetaData {
   /** Tag hierarchies extracted from image metadata (HierarchicalSubject, Subject, Keywords) */
   tagHierarchies?: string[][];
+  /** Decimal-degree GPS coordinates, or null when the file has no GPS EXIF data */
+  lat: number | null;
+  lng: number | null;
 }
 
 /**
@@ -319,11 +322,11 @@ export async function getMetaDataWithTags(
   if (!readTags) {
     // Use existing method for backwards compatibility
     const basicMetadata = await getMetaData(stats, imageLoader);
-    return basicMetadata;
+    return { ...basicMetadata, lat: null, lng: null };
   }
 
   // Use the new combined ExifTool call for optimal performance
-  const { dimensions, tags } = await imageLoader.getImageResolutionAndTags(stats.absolutePath);
+  const { dimensions, tags, gps } = await imageLoader.getImageResolutionAndTags(stats.absolutePath);
 
   return {
     name: Path.basename(path),
@@ -333,6 +336,8 @@ export async function getMetaDataWithTags(
     height: dimensions.height,
     dateCreated: stats.dateCreated,
     tagHierarchies: tags,
+    lat: gps?.lat ?? null,
+    lng: gps?.lng ?? null,
   };
 }
 

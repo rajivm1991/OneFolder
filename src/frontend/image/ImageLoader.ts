@@ -231,6 +231,7 @@ class ImageLoader {
   async getImageResolutionAndTags(absolutePath: string): Promise<{
     dimensions: { width: number; height: number };
     tags: string[][];
+    gps: { lat: number; lng: number } | null;
   }> {
     const result = await this.exifIO.getDimensionsAndTags(absolutePath);
 

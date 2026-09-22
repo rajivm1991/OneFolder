@@ -623,6 +623,8 @@ export async function pathToIFile(
     dateModified: now,
     dateLastIndexed: now,
     annotations: '{}',
+    lat: undefined,
+    lng: undefined,
     ...(await getMetaData(stats, imageLoader)),
   };
 }
@@ -692,6 +694,8 @@ export async function pathToIFileWithMetadata(
     width: extendedMetadata.width,
     height: extendedMetadata.height,
     dateCreated: extendedMetadata.dateCreated,
+    lat: extendedMetadata.lat,
+    lng: extendedMetadata.lng,
   };
 }
 
