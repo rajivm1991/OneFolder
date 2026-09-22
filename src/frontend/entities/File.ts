@@ -78,6 +78,8 @@ export class ClientFile {
   @observable thumbnailPath: string = '';
   // Is undefined until existence check has been completed
   @observable isBroken?: boolean;
+  @observable lat: number | null | undefined;
+  @observable lng: number | null | undefined;
 
   constructor(store: FileStore, fileProps: FileDTO, exifTool: ExifIO) {
     this.store = store;
@@ -96,6 +98,8 @@ export class ClientFile {
     this.dateLastIndexed = fileProps.dateLastIndexed;
     this.name = fileProps.name;
     this.extension = fileProps.extension;
+    this.lat = fileProps.lat;
+    this.lng = fileProps.lng;
 
     const location = store.getLocation(this.locationId);
     this.absolutePath = Path.join(location.path, this.relativePath);
@@ -132,6 +136,11 @@ export class ClientFile {
 
   @action.bound setThumbnailPath(thumbnailPath: string): void {
     this.thumbnailPath = thumbnailPath;
+  }
+
+  @action.bound setGpsCoordinates(lat: number | null, lng: number | null): void {
+    this.lat = lat;
+    this.lng = lng;
   }
 
   @action.bound addTag(tag: ClientTag): void {
@@ -272,6 +281,8 @@ export class ClientFile {
       name: this.name,
       extension: this.extension,
       annotations: this.annotations, // serialize annotations object to string
+      lat: this.lat,
+      lng: this.lng,
     };
   }
 

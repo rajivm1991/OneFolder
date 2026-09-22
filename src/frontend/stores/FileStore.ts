@@ -529,6 +529,13 @@ class FileStore {
     return this.content === Content.Duplicates;
   }
 
+  @computed get geoTaggedFiles(): ClientFile[] {
+    return this.fileList.filter(
+      (file): file is ClientFile & { lat: number; lng: number } =>
+        typeof file.lat === 'number' && typeof file.lng === 'number',
+    );
+  }
+
   @action.bound switchOrderDirection(): void {
     this.setOrderDirection(
       this.orderDirection === OrderDirection.Desc ? OrderDirection.Asc : OrderDirection.Desc,
