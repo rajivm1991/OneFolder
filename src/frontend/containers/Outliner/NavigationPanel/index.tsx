@@ -55,7 +55,7 @@ const TagsPanel = observer(() => {
         icon={IconSet.DUPLICATE}
         onClick={uiStore.setMethodDuplicates}
         checked={uiStore.isDuplicates}
-        text="Faces"
+        text="Duplicates"
       />
       <NavigationButton
         icon={IconSet.FACE_SMILING}

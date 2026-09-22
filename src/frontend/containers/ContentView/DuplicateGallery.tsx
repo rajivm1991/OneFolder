@@ -634,7 +634,7 @@ const AlgorithmSelector = ({
               onChange={(e) => onSimilarityThresholdChange(Number(e.target.value))}
               className="threshold-slider"
               style={{
-                width: '100%',
+                width: '300px',
                 marginTop: '8px',
               }}
             />
@@ -651,114 +651,109 @@ const AlgorithmSelector = ({
       <br />
       <br />
       <div className="algorithm-actions">
-        <div className="analyze-section">
-          <button
-            className="btn-analyze-new"
-            onClick={onAnalyze}
-            disabled={isAnalyzing}
-            style={{
-              backgroundColor: isAnalyzing ? 'var(--border-color)' : '#007bff',
-              color: 'white',
-              border: 'none',
-              cursor: isAnalyzing ? 'not-allowed' : 'pointer',
-              transition: 'background-color 0.2s ease',
-            }}
-            onMouseEnter={(e) => {
-              if (!isAnalyzing) {
-                e.currentTarget.style.backgroundColor = '#0056b3';
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!isAnalyzing) {
-                e.currentTarget.style.backgroundColor = '#007bff';
-              }
-            }}
-          >
+        <div className="analyze-section" style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+          {hasFilters && !isAnalyzing && (
             <div
-              className="analyze-content"
+              className="analyze-filters-line"
               style={{
                 display: 'flex',
-                alignItems: 'center',
-                gap: '8px',
+                flexWrap: 'wrap',
+                gap: '4px',
+                marginBottom: '8px',
+                maxWidth: '100%',
               }}
             >
-              <span
-                className="analyze-icon"
+              {uiStore.searchCriteriaList.map((criteria: any, index: number) => (
+                <span
+                  key={index}
+                  className="analyze-filter-pill"
+                  style={{
+                    backgroundColor: 'var(--accent-color-bg)',
+                    color: 'var(--text-primary)',
+                    border: '1px solid var(--accent-color-subtle)',
+                    padding: '2px 6px',
+                    borderRadius: '3px',
+                    fontSize: '0.8rem',
+                    display: 'inline-block',
+                    wordBreak: 'break-word',
+                    overflowWrap: 'break-word',
+                    lineHeight: '1.2',
+                  }}
+                >
+                  {criteria.getLabel({ tags: 'Tags', absolutePath: 'Path' }, rootStore)}
+                </span>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <button
+              className="btn-analyze-new"
+              onClick={onAnalyze}
+              disabled={isAnalyzing}
+              style={{
+                backgroundColor: isAnalyzing ? 'var(--border-color)' : '#007bff',
+                color: 'white',
+                border: 'none',
+                cursor: isAnalyzing ? 'not-allowed' : 'pointer',
+                transition: 'background-color 0.2s ease',
+                width: 'fit-content',
+                flex: 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!isAnalyzing) {
+                  e.currentTarget.style.backgroundColor = '#0056b3';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isAnalyzing) {
+                  e.currentTarget.style.backgroundColor = '#007bff';
+                }
+              }}
+            >
+              <div
+                className="analyze-content"
                 style={{
-                  color: 'white',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  minWidth: '24px',
-                  minHeight: '24px',
-                  flexShrink: 0,
+                  gap: '8px',
                 }}
               >
-                {IconSet.INTELLIGENCE}
-              </span>
-              <div
-                className="analyze-main-content"
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justifyContent: 'center',
-                  flex: 1,
-                }}
-              >
+                <span
+                  className="analyze-icon"
+                  style={{
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    minWidth: '24px',
+                    minHeight: '24px',
+                    flexShrink: 0,
+                  }}
+                >
+                  {IconSet.INTELLIGENCE}
+                </span>
                 <span className="analyze-text" style={{ color: 'white' }}>
                   {isAnalyzing ? 'Analyzing...' : `Analyze ${fileCount.toLocaleString()} files`}
                 </span>
-                {hasFilters && !isAnalyzing && (
-                  <div
-                    className="analyze-filters-line"
-                    style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      gap: '4px',
-                      marginTop: '4px',
-                      maxWidth: '100%',
-                    }}
-                  >
-                    {uiStore.searchCriteriaList.map((criteria: any, index: number) => (
-                      <span
-                        key={index}
-                        className="analyze-filter-pill"
-                        style={{
-                          backgroundColor: 'rgba(255, 255, 255, 0.2)',
-                          color: 'white',
-                          border: '1px solid rgba(255, 255, 255, 0.3)',
-                          padding: '2px 6px',
-                          borderRadius: '3px',
-                          fontSize: '0.8rem',
-                          display: 'inline-block',
-                          wordBreak: 'break-word',
-                          overflowWrap: 'break-word',
-                          lineHeight: '1.2',
-                        }}
-                      >
-                        {criteria.getLabel({ tags: 'Tags', absolutePath: 'Path' }, rootStore)}
-                      </span>
-                    ))}
-                  </div>
-                )}
               </div>
-            </div>
-          </button>
-          {hasFilters && (
-            <button
-              className="btn-clear-filters"
-              onClick={() => {
-                uiStore.clearSearchCriteriaList();
-                fileStore.fetchAllFiles();
-              }}
-              title="Remove all filters and analyze entire collection"
-            >
-              <span style={{ transform: 'scale(0.8)', display: 'inline-block' }}>
-                {IconSet.CLOSE}
-              </span>
-              Clear filters
             </button>
-          )}
+            {hasFilters && (
+              <button
+                className="btn-clear-filters"
+                onClick={() => {
+                  uiStore.clearSearchCriteriaList();
+                  fileStore.fetchAllFiles();
+                }}
+                title="Remove all filters and analyze entire collection"
+              >
+                <span style={{ transform: 'scale(0.8)', display: 'inline-block' }}>
+                  {IconSet.CLOSE}
+                </span>
+                Clear filters
+              </button>
+            )}
+          </div>
         </div>
 
         {stats && (
