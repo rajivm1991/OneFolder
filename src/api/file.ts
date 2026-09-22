@@ -32,6 +32,14 @@ export type FileDTO = {
 
   /** file annotations in W3C WebAnnotation model. */
   annotations: string;
+
+  /**
+   * Decimal-degree latitude parsed from GPS EXIF data.
+   * undefined = not yet checked for GPS; null = checked, none found; number = a real coordinate.
+   */
+  lat: number | null | undefined;
+  /** Decimal-degree longitude. Same undefined/null/number semantics as `lat`. */
+  lng: number | null | undefined;
 };
 
 export const IMG_EXTENSIONS = [

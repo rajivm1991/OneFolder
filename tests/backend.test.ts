@@ -47,6 +47,8 @@ describe('Backend', () => {
         id: index.toString(),
         tags: [],
         annotations: '',
+        lat: undefined,
+        lng: undefined,
       });
     }
 
@@ -124,5 +126,32 @@ describe('Backend', () => {
     // describe('mergeTags', () => {
     // TODO
     // });
+  });
+
+  test('saveFiles persists lat/lng fields', async (backend) => {
+    const file: FileDTO = {
+      id: 'file1',
+      ino: 'ino1',
+      locationId: 'loc1',
+      relativePath: '/a.jpg',
+      absolutePath: '/root/a.jpg',
+      tags: [],
+      dateAdded: new Date(),
+      dateModified: new Date(),
+      dateLastIndexed: new Date(),
+      name: 'a',
+      extension: 'jpg',
+      size: 100,
+      width: 10,
+      height: 10,
+      dateCreated: new Date(),
+      annotations: '{}',
+      lat: 48.8566,
+      lng: 2.3522,
+    };
+    await backend.saveFiles([file]);
+    const [saved] = await backend.fetchFilesByKey('id', 'file1');
+    expect(saved.lat).toBe(48.8566);
+    expect(saved.lng).toBe(2.3522);
   });
 });

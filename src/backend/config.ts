@@ -161,6 +161,26 @@ const dbConfig: DBVersioningConfig[] = [
       },
     ],
   },
+  {
+    // Version 13, 22-9-26: Added lat/lng for Map View
+    version: 13,
+    collections: [
+      {
+        name: 'files',
+        schema:
+          '++id, ino, locationId, *tags, relativePath, &absolutePath, name, extension, size, width, height, dateAdded, dateModified, dateCreated, annotations, lat, lng',
+      },
+    ],
+    upgrade: (tx: Transaction): void => {
+      tx.table('files')
+        .toCollection()
+        .modify((file: FileDTO) => {
+          file.lat = undefined;
+          file.lng = undefined;
+          return file;
+        });
+    },
+  },
 ];
 
 type DBVersioningConfig = {
