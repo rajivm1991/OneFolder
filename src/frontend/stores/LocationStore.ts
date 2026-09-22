@@ -173,8 +173,9 @@ class LocationStore {
       console.log('Finding created files...');
       // Find all files that have been created (those on disk but not in DB)
       const createdPaths = diskFiles.filter((f) => !dbFilesPathSet.has(f.absolutePath));
-      const createdFiles = await Promise.all(
-        createdPaths.map((path) => pathToIFile(path, location, this.rootStore.imageLoader)),
+      const createdFiles = await promiseAllLimit(
+        createdPaths.map((path) => () => pathToIFile(path, location, this.rootStore.imageLoader)),
+        50, // Matches the concurrency limit already used for the similar bulk case in initLocation (below)
       );
 
       // Find all files of this location that have been removed (those in DB but not on disk anymore)
