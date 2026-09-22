@@ -10,6 +10,22 @@ mapboxgl.accessToken = process.env.MAPBOX_ACCESS_TOKEN;
 
 const DEFAULT_CENTER: [number, number] = [2.5, 48.35];
 const DEFAULT_ZOOM = 3;
+const RECENT_PHOTO_ZOOM = 8;
+
+/** Centers on the most recently-dated photo, so the map opens over "your" region instead of the whole globe. */
+function getInitialView(
+  files: (ClientFile & { lat: number; lng: number })[],
+): { center: [number, number]; zoom: number } {
+  if (files.length === 0) {
+    return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
+  }
+
+  const mostRecent = files.reduce((latest, file) =>
+    file.dateCreated > latest.dateCreated ? file : latest,
+  );
+
+  return { center: [mostRecent.lng, mostRecent.lat], zoom: RECENT_PHOTO_ZOOM };
+}
 
 function toGeoJson(
   files: (ClientFile & { lat: number; lng: number })[],
@@ -39,14 +55,16 @@ const MapView = observer(() => {
       return;
     }
 
+    const { center, zoom } = getInitialView(geoFiles);
+
     const m = new mapboxgl.Map({
       container: mapContainer.current,
       style:
         uiStore.theme === 'dark'
           ? 'mapbox://styles/mapbox/dark-v11'
           : 'mapbox://styles/mapbox/streets-v12',
-      center: DEFAULT_CENTER,
-      zoom: DEFAULT_ZOOM,
+      center,
+      zoom,
     });
 
     m.on('load', () => {
