@@ -115,6 +115,10 @@ class LocationStore {
       }
     }
 
+    // Files confirmed missing (no rename/move match found) across all locations,
+    // offered to the user for one-click removal from the library
+    const confirmedMissingIds: ID[] = [];
+
     // For every location, find created/moved/deleted files, and update the database accordingly.
     // TODO: Do this in a web worker, not in the renderer thread!
     for (let i = 0; i < len; i++) {
@@ -212,6 +216,13 @@ class LocationStore {
 
       console.debug({ missingFiles, createdFiles, createdMatches, dbMatches });
 
+      // Files with no rename/move match on disk: genuinely gone, offer them for removal
+      for (let i = 0; i < missingFiles.length; i++) {
+        if (!createdMatches[i] && !dbMatches[i]) {
+          confirmedMissingIds.push(missingFiles[i].id);
+        }
+      }
+
       // Update renamed files in backend
       const foundCreatedMatches = createdMatches.filter((m) => m !== undefined) as FileDTO[];
       if (foundCreatedMatches.length > 0) {
@@ -308,6 +319,26 @@ class LocationStore {
       AppToaster.show({ message: 'New images detected.', timeout: 5000 }, progressToastKey);
     } else {
       AppToaster.dismiss(progressToastKey);
+    }
+
+    if (confirmedMissingIds.length > 0) {
+      AppToaster.show(
+        {
+          message: `${confirmedMissingIds.length} file${
+            confirmedMissingIds.length !== 1 ? 's' : ''
+          } no longer found on disk.`,
+          timeout: 0,
+          clickAction: {
+            label: 'Remove',
+            onClick: async () => {
+              await this.backend.removeFiles(confirmedMissingIds);
+              this.rootStore.fileStore.refetch();
+              AppToaster.dismiss('missing-files-cleanup');
+            },
+          },
+        },
+        'missing-files-cleanup',
+      );
     }
     return foundNewFiles;
   }
