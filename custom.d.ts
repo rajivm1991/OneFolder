@@ -192,3 +192,9 @@ type MWGRegionInfo = {
 type MWGJson = {
   RegionInfo: MWGRegionInfo;
 };
+
+declare namespace NodeJS {
+  interface ProcessEnv {
+    MAPBOX_ACCESS_TOKEN: string;
+  }
+}

@@ -87,6 +87,8 @@ Then run the following commands to get started:
 2. Run `yarn dev` to build the project files to the `/build` directory. This will keep running to immediately build changed files when they are updated.
 3. In a second terminal, run `yarn start` to start the application. Refresh the window (Ctrl/Cmd + R) after modifying a file to load the updated build files.
 
+- `MAPBOX_ACCESS_TOKEN` — required to build with Map View enabled. Get a token at https://account.mapbox.com/access-tokens/.
+
 ### Release Build
 
 An installable executable can be built using `yarn package` for your platform in the `/dist` folder. The building is performed using the [electron-builder](https://www.electron.build/) package, and is configured by a section in the `package.json` file.

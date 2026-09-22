@@ -6,6 +6,7 @@
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const CopyWebpackPlugin = require('copy-webpack-plugin');
+const webpack = require('webpack');
 const path = require('path');
 
 let mainConfig = {
@@ -155,6 +156,9 @@ let rendererConfig = {
           to: path.join(__dirname, 'build', 'entitlements.mac.plist'),
         },
       ],
+    }),
+    new webpack.DefinePlugin({
+      'process.env.MAPBOX_ACCESS_TOKEN': JSON.stringify(process.env.MAPBOX_ACCESS_TOKEN || ''),
     }),
   ],
 };

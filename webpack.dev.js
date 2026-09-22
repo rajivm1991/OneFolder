@@ -5,6 +5,7 @@
 // Based on https://taraksharma.com/setting-up-electron-typescript-react-webpack/
 
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const webpack = require('webpack');
 const path = require('path');
 
 let mainConfig = {
@@ -123,6 +124,9 @@ let rendererConfig = {
   plugins: [
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, './src/index.html'),
+    }),
+    new webpack.DefinePlugin({
+      'process.env.MAPBOX_ACCESS_TOKEN': JSON.stringify(process.env.MAPBOX_ACCESS_TOKEN || ''),
     }),
   ],
 };

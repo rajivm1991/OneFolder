@@ -4,7 +4,7 @@ import { RendererMessenger } from '../../ipc/renderer';
 import { useStore } from '../contexts/StoreContext';
 import { ClientFile } from '../entities/File';
 import { AppToaster } from './Toaster';
-import { convert } from 'geo-coordinates-parser';
+import { parseGpsCoordinates } from 'common/gps';
 
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
@@ -12,11 +12,7 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 // import { shell } from 'electron';
 import { observer } from 'mobx-react-lite';
 
-const in1 = 'pk';
-const in2 = 'eyJ1IjoiYW50b2luZS1sYiIsImEiOiJjbHFxdjNoM2UzcG93MmtubXR0eXg1dmhuIn0';
-const in3 = 'OH7kkxGoKpR_UK9lJb45sw';
-
-mapboxgl.accessToken = `${in1}.${in2}.${in3}`;
+mapboxgl.accessToken = process.env.MAPBOX_ACCESS_TOKEN;
 
 type ExifField = { label: string; modifiable?: boolean; format?: (val: string) => ReactNode };
 
@@ -92,22 +88,13 @@ const ImageInfo = observer(({ file }: ImageInfoProps) => {
       currentMarker.remove();
     }
 
-    if (!gpsLatitude || gpsLatitude === ' ' || !gpsLongitude || gpsLongitude === ' ') {
+    const parsed = parseGpsCoordinates(gpsLatitude, gpsLongitude);
+    if (!parsed) {
       return;
     }
 
-    try {
-      const converted = convert(`${gpsLatitude}, ${gpsLongitude}}`, 5);
-      if (converted) {
-        //@ts-ignore
-        setLat(converted.decimalLatitude);
-        //@ts-ignore
-        setLon(converted.decimalLongitude);
-      }
-    } catch (error) {
-      console.log(error);
-      return;
-    }
+    setLat(parsed.lat);
+    setLon(parsed.lng);
   }, [exifStats]);
 
   useEffect(() => {
