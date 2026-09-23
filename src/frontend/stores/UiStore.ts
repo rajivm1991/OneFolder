@@ -703,12 +703,12 @@ class UiStore {
     if (clear === true) {
       this.clearLocationSelection();
     }
-    this.locationSelection.add(location.path);
+    this.locationSelection.add(location instanceof ClientLocation ? location.id : location.path);
     this.clearTagSelection();
   }
 
   @action.bound deselectLocation(location: ClientLocation | ClientSubLocation): void {
-    this.locationSelection.delete(location.path);
+    this.locationSelection.delete(location instanceof ClientLocation ? location.id : location.path);
   }
 
   @action.bound clearLocationSelection(): void {

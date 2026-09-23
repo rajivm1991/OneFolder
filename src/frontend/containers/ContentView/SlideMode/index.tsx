@@ -376,6 +376,7 @@ const ZoomableImage: React.FC<ZoomableImageProps> = observer(
       if (isFileExtensionVideo(file.extension)) {
         return (
           <ZoomPan
+            key={file.id}
             position="center"
             initialScale="auto"
             doubleTapBehavior="zoomOrReset"
@@ -409,6 +410,7 @@ const ZoomableImage: React.FC<ZoomableImageProps> = observer(
 
       return (
         <ZoomPan
+          key={file.id}
           position="center"
           initialScale="auto"
           doubleTapBehavior="zoomOrReset"
