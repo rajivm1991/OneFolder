@@ -670,6 +670,7 @@ class FileStore {
   @action.bound async fetchAllFiles(): Promise<void> {
     try {
       this.rootStore.uiStore.clearSearchCriteriaList();
+      this.rootStore.uiStore.setFirstItem(0);
       const fetchedFiles = await this.backend.fetchFiles(this.orderBy, this.orderDirection);
       this.setContentAll();
       return this.updateFromBackend(fetchedFiles);
@@ -682,6 +683,7 @@ class FileStore {
     try {
       const { uiStore } = this.rootStore;
       uiStore.clearSearchCriteriaList();
+      uiStore.setFirstItem(0);
       const criteria = new ClientTagSearchCriteria('tags');
       uiStore.searchCriteriaList.push(criteria);
       const fetchedFiles = await this.backend.searchFiles(
@@ -706,6 +708,7 @@ class FileStore {
       } = this;
 
       uiStore.searchCriteriaList.clear();
+      uiStore.setFirstItem(0);
       this.setContentMissing();
 
       // Fetch all files, then check their existence and only show the missing ones
@@ -769,6 +772,7 @@ class FileStore {
 
     const criterias = uiStore.searchCriteriaList.map((c) => c.toCondition(this.rootStore));
     try {
+      uiStore.setFirstItem(0);
       const fetchedFiles = await this.backend.searchFiles(
         criterias as [ConditionDTO<FileDTO>, ...ConditionDTO<FileDTO>[]],
         this.orderBy,
@@ -786,6 +790,7 @@ class FileStore {
     try {
       // For now, just fetch all files - the duplicate detection logic is in the component
       // In a future enhancement, we could move this logic to the backend for better performance
+      this.rootStore.uiStore.setFirstItem(0);
       const fetchedFiles = await this.backend.fetchFiles(this.orderBy, this.orderDirection);
       this.setContentDuplicates();
       return this.updateFromBackend(fetchedFiles);
