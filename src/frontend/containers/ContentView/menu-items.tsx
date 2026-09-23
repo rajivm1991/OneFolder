@@ -35,7 +35,13 @@ export const MissingFileMenuItems = observer(() => {
 });
 
 export const FileViewerMenuItems = ({ file }: { file: ClientFile }) => {
-  const { uiStore, locationStore } = useStore();
+  const { uiStore, locationStore, fileStore } = useStore();
+
+  const handleRefreshDimensions = useAction(() => {
+    const selected = Array.from(uiStore.fileSelection);
+    const targets = selected.includes(file) ? selected : [file];
+    fileStore.refreshDimensions(targets);
+  });
 
   const handleViewFullSize = () => {
     uiStore.selectFile(file, true);
@@ -85,6 +91,11 @@ export const FileViewerMenuItems = ({ file }: { file: ClientFile }) => {
         onClick={handleRemoveAllTags}
         text="Remove All Tags"
         icon={IconSet.DELETE}
+      />
+      <MenuItem
+        onClick={handleRefreshDimensions}
+        text="Refresh Dimensions"
+        icon={IconSet.RELOAD}
       />
       <MenuSubItem text="Search Similar Images..." icon={IconSet.MORE}>
         <MenuItem

@@ -86,6 +86,47 @@ class ExifIO {
   }
 
   /**
+   * Swaps width/height when a video's rotation metadata indicates it is displayed
+   * on its side (90 or 270 degrees) relative to its encoded frame dimensions.
+   */
+  private applyVideoRotation(
+    width: number,
+    height: number,
+    rotation: number | undefined,
+  ): { width: number; height: number } {
+    const normalizedRotation = ((rotation ?? 0) % 360 + 360) % 360;
+    if (normalizedRotation === 90 || normalizedRotation === 270) {
+      return { width: height, height: width };
+    }
+    return { width, height };
+  }
+
+  /**
+   * Swaps width/height when an image's EXIF Orientation tag indicates it is displayed
+   * rotated 90/270 degrees relative to its stored pixel dimensions (e.g. panoramas
+   * stored tall but meant to be viewed wide).
+   */
+  private applyImageOrientation(
+    width: number,
+    height: number,
+    orientation: string | number | undefined,
+  ): { width: number; height: number } {
+    if (orientation === undefined) {
+      return { width, height };
+    }
+    // Numeric EXIF orientation values 5-8 correspond to a 90/270 degree rotation
+    // (with or without mirroring). String form comes back as e.g. "Rotate 90 CW".
+    const isRotated90Or270 =
+      typeof orientation === 'number'
+        ? orientation >= 5 && orientation <= 8
+        : /90|270/.test(orientation);
+    if (isRotated90Or270) {
+      return { width: height, height: width };
+    }
+    return { width, height };
+  }
+
+  /**
    * Helper method to determine if an ExifTool error message is just a warning that can be ignored
    * @param errorMessage The error message from ExifTool
    * @returns true if the error is a harmless warning
@@ -327,10 +368,10 @@ class ExifIO {
     try {
       // Check if this is a video file to use appropriate metadata fields
       const isVideo = this.isVideoFile(filepath);
-      const fields = isVideo 
-        ? ['s3', 'ImageWidth', 'ImageHeight', 'VideoWidth', 'VideoHeight', 'SourceImageWidth', 'SourceImageHeight']
-        : ['s3', 'ImageWidth', 'ImageHeight'];
-        
+      const fields = isVideo
+        ? ['s3', 'ImageWidth', 'ImageHeight', 'VideoWidth', 'VideoHeight', 'SourceImageWidth', 'SourceImageHeight', 'Rotation']
+        : ['s3', 'ImageWidth', 'ImageHeight', 'Orientation'];
+
       metadata = await ep.readMetadata(filepath, [
         ...fields,
         ...this.extraArgs,
@@ -357,11 +398,13 @@ class ExifIO {
       const width = isVideo 
         ? (entry.VideoWidth || entry.SourceImageWidth || entry.ImageWidth || 0)
         : (entry.ImageWidth || 0);
-      const height = isVideo 
+      const height = isVideo
         ? (entry.VideoHeight || entry.SourceImageHeight || entry.ImageHeight || 0)
         : (entry.ImageHeight || 0);
-        
-      return { width, height };
+
+      return isVideo
+        ? this.applyVideoRotation(width, height, entry.Rotation)
+        : this.applyImageOrientation(width, height, entry.Orientation);
     } catch (e) {
       console.error('Could not read image dimensions from ', filepath, e, metadata);
       return { width: 0, height: 0 };
@@ -381,9 +424,9 @@ class ExifIO {
     try {
       // Check if this is a video file to use appropriate metadata fields
       const isVideo = this.isVideoFile(filepath);
-      const dimensionFields = isVideo 
-        ? ['s3', 'ImageWidth', 'ImageHeight', 'VideoWidth', 'VideoHeight', 'SourceImageWidth', 'SourceImageHeight']
-        : ['s3', 'ImageWidth', 'ImageHeight'];
+      const dimensionFields = isVideo
+        ? ['s3', 'ImageWidth', 'ImageHeight', 'VideoWidth', 'VideoHeight', 'SourceImageWidth', 'SourceImageHeight', 'Rotation']
+        : ['s3', 'ImageWidth', 'ImageHeight', 'Orientation'];
         
       metadata = await ep.readMetadata(filepath, [
         ...dimensionFields,
@@ -417,11 +460,13 @@ class ExifIO {
       const width = isVideo 
         ? (entry.VideoWidth || entry.SourceImageWidth || entry.ImageWidth || 0)
         : (entry.ImageWidth || 0);
-      const height = isVideo 
+      const height = isVideo
         ? (entry.VideoHeight || entry.SourceImageHeight || entry.ImageHeight || 0)
         : (entry.ImageHeight || 0);
 
-      const dimensions = { width, height };
+      const dimensions = isVideo
+        ? this.applyVideoRotation(width, height, entry.Rotation)
+        : this.applyImageOrientation(width, height, entry.Orientation);
 
       // Extract tags using existing conversion logic
       const tags = ExifIO.convertMetadataToHierarchy(

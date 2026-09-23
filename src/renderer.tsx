@@ -124,6 +124,11 @@ async function runMainApp(db: Dexie, root: Root): Promise<void> {
     rootStore.close();
   });
 
+  // Re-reads width/height for every file and fixes only the ones that are wrong
+  // (e.g. rotated videos/panoramas imported before rotation-aware dimension reading
+  // was added), without a full library re-index.
+  (window as any).fixRotatedMediaDimensions = () => rootStore.fileStore.fixRotatedMediaDimensions();
+
   // Expose debug methods in development mode
   if (IS_DEV) {
     (window as any).clearFilesOnly = () => rootStore.clearFilesOnly();

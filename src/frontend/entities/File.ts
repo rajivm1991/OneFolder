@@ -63,8 +63,8 @@ export class ClientFile {
   readonly absolutePath: string;
   readonly tags: ObservableSet<ClientTag>;
   readonly size: number;
-  readonly width: number;
-  readonly height: number;
+  @observable width: number;
+  @observable height: number;
   readonly dateAdded: Date;
   readonly dateCreated: Date;
   readonly dateModified: Date;
@@ -141,6 +141,11 @@ export class ClientFile {
   @action.bound setGpsCoordinates(lat: number | null, lng: number | null): void {
     this.lat = lat;
     this.lng = lng;
+  }
+
+  @action.bound setDimensions(width: number, height: number): void {
+    this.width = width;
+    this.height = height;
   }
 
   @action.bound addTag(tag: ClientTag): void {

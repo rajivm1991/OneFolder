@@ -509,6 +509,60 @@ class FileStore {
     }
   }
 
+  /**
+   * Re-reads width/height for the given files and fixes only the ones whose stored dimensions
+   * don't match reality (e.g. rotated videos/panoramas imported before rotation-aware
+   * dimension reading was added). Much cheaper than a full re-index since it skips
+   * thumbnail regeneration and tag re-import, and only writes files that actually changed.
+   */
+  @action.bound async refreshDimensions(files: ClientFile[]): Promise<void> {
+    const toastKey = 'fix-rotated-dimensions';
+    const total = files.length;
+    let fixed = 0;
+    let checked = 0;
+
+    AppToaster.show(
+      { message: `Checking ${total} file${total === 1 ? '' : 's'} for incorrect dimensions...`, timeout: 0 },
+      toastKey,
+    );
+
+    await promiseAllLimit(
+      files.map((file) => async () => {
+        try {
+          const { width, height } = await this.rootStore.imageLoader.getImageResolution(
+            file.absolutePath,
+          );
+          checked++;
+          if (width > 0 && height > 0 && (width !== file.width || height !== file.height)) {
+            runInAction(() => file.setDimensions(width, height));
+            fixed++;
+          }
+        } catch (e) {
+          console.error('Could not check dimensions for', file.absolutePath, e);
+        }
+      }),
+      50,
+      (progress) => {
+        AppToaster.show(
+          {
+            message: `Checking dimensions: ${Math.trunc(progress * 100)}% (${fixed} fixed so far)`,
+            timeout: 0,
+          },
+          toastKey,
+        );
+      },
+    );
+
+    AppToaster.show(
+      { message: `Done. Fixed dimensions for ${fixed}/${checked} file${checked === 1 ? '' : 's'}.`, timeout: 7000 },
+      toastKey,
+    );
+  }
+
+  @action.bound async fixRotatedMediaDimensions(): Promise<void> {
+    await this.refreshDimensions(this.fileList);
+  }
+
   @computed get showsAllContent(): boolean {
     return this.content === Content.All;
   }
