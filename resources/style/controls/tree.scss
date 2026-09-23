@@ -56,6 +56,12 @@
     background-color: var(--background-color-selected);
     color: var(--text-color-strong);
 
+    > .tree-content-label,
+    > .tree-content-label * {
+      background-color: var(--background-color-selected);
+      color: var(--text-color-strong);
+    }
+
     &:hover {
       // TODO: proper background color change for hover
       // This also changes text color

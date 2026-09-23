@@ -9,6 +9,7 @@ import { ID } from '../../api/id';
 import { SearchCriteria } from '../../api/search-criteria';
 import { RendererMessenger } from '../../ipc/renderer';
 import { ClientFile } from '../entities/File';
+import { ClientLocation, ClientSubLocation } from '../entities/Location';
 import { ClientFileSearchCriteria, ClientTagSearchCriteria } from '../entities/SearchCriteria';
 import { ClientTag } from '../entities/Tag';
 import { comboMatches, getKeyCombo, parseKeyCombo } from '../hotkeyParser';
@@ -211,6 +212,8 @@ class UiStore {
   // However, sets are more suitable because they have quicker lookup performance.
   readonly fileSelection = observable(new Set<ClientFile>());
   readonly tagSelection = observable(new Set<ClientTag>());
+  /** Paths of selected locations/sublocations in the outliner */
+  readonly locationSelection = observable(new Set<string>());
 
   readonly searchCriteriaList = observable<ClientFileSearchCriteria>([]);
 
@@ -657,6 +660,7 @@ class UiStore {
       this.clearTagSelection();
     }
     this.tagSelection.add(tag);
+    this.clearLocationSelection();
   }
 
   @action.bound deselectTag(tag: ClientTag): void {
@@ -669,6 +673,7 @@ class UiStore {
     } else {
       this.tagSelection.add(tag);
     }
+    this.clearLocationSelection();
   }
 
   /** Selects a range of tags, where indices correspond to the flattened tag list. */
@@ -676,19 +681,38 @@ class UiStore {
     const tagTreeList = this.rootStore.tagStore.tagList;
     if (!additive) {
       this.tagSelection.replace(tagTreeList.slice(start, end + 1));
+      this.clearLocationSelection();
       return;
     }
     for (let i = start; i <= end; i++) {
       this.tagSelection.add(tagTreeList[i]);
     }
+    this.clearLocationSelection();
   }
 
   @action.bound selectAllTags(): void {
     this.tagSelection.replace(this.rootStore.tagStore.tagList);
+    this.clearLocationSelection();
   }
 
   @action.bound clearTagSelection(): void {
     this.tagSelection.clear();
+  }
+
+  @action.bound selectLocation(location: ClientLocation | ClientSubLocation, clear?: boolean): void {
+    if (clear === true) {
+      this.clearLocationSelection();
+    }
+    this.locationSelection.add(location.path);
+    this.clearTagSelection();
+  }
+
+  @action.bound deselectLocation(location: ClientLocation | ClientSubLocation): void {
+    this.locationSelection.delete(location.path);
+  }
+
+  @action.bound clearLocationSelection(): void {
+    this.locationSelection.clear();
   }
 
   @action.bound async removeSelectedTags(): Promise<void> {
@@ -1098,6 +1122,7 @@ class UiStore {
   /////////////////// Helper methods ///////////////////
   @action.bound clearSelection(): void {
     this.tagSelection.clear();
+    this.locationSelection.clear();
     this.fileSelection.clear();
   }
 

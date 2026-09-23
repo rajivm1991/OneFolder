@@ -324,9 +324,10 @@ const TagItem = observer((props: ITagItemProps) => {
       nodeData.isSelected
         ? uiStore.replaceCriteriaWithTagSelection()
         : uiStore.replaceSearchCriteria(new ClientTagSearchCriteria('tags', nodeData.id));
+      uiStore.clearLocationSelection();
       select(event, nodeData);
     },
-    [nodeData, select],
+    [nodeData, select, uiStore],
   );
 
   // const handleQuickQuery = useCallback(
@@ -544,6 +545,9 @@ const TagsTree = observer((props: Partial<MultiSplitPaneProps>) => {
     // Note: selection logic is copied from Gallery.tsx
     const rangeSelection = e.shiftKey;
     const expandSelection = e.ctrlKey || e.metaKey;
+
+    // Clicking a tag should never keep a location selected
+    uiStore.clearLocationSelection();
 
     /** The index of the active (newly selected) item */
     const i = tagStore.findFlatTagListIndex(selectedTag);

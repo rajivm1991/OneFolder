@@ -83,6 +83,7 @@ interface ITreeData {
   setExpansion: React.Dispatch<IExpansionState>;
   delete: (location: ClientLocation) => void;
   exclude: (subLocation: ClientSubLocation) => void;
+  selectedIds: Set<string>;
 }
 
 const toggleExpansion = (nodeData: ClientLocation | ClientSubLocation, treeData: ITreeData) => {
@@ -93,6 +94,9 @@ const toggleExpansion = (nodeData: ClientLocation | ClientSubLocation, treeData:
 
 const isExpanded = (nodeData: ClientLocation | ClientSubLocation, treeData: ITreeData) =>
   !!treeData.expansion[nodeData instanceof ClientLocation ? nodeData.id : nodeData.path];
+
+const isSelected = (nodeData: ClientLocation | ClientSubLocation, treeData: ITreeData): boolean =>
+  treeData.selectedIds.has(nodeData instanceof ClientLocation ? nodeData.id : nodeData.path);
 
 /** Add an additional / or \ in order to enforce files only in the specific directory are found, not in those starting with same name */
 const pathAsSearchPath = (path: string) => `${path}${SysPath.sep}`;
@@ -242,13 +246,18 @@ const SubLocation = observer((props: { nodeData: ClientSubLocation; treeData: IT
 
   const handleClick = useCallback(
     (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
-      existingSearchCrit // toggle search
-        ? uiStore.removeSearchCriteria(existingSearchCrit)
-        : event.ctrlKey // otherwise add/replace depending on ctrl
-        ? uiStore.addSearchCriteria(pathCriteria(nodeData.path))
-        : uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
+      if (existingSearchCrit) {
+        uiStore.removeSearchCriteria(existingSearchCrit);
+        uiStore.deselectLocation(nodeData);
+      } else if (event.ctrlKey) {
+        uiStore.addSearchCriteria(pathCriteria(nodeData.path));
+        uiStore.selectLocation(nodeData);
+      } else {
+        uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
+        uiStore.selectLocation(nodeData, true);
+      }
     },
-    [existingSearchCrit, nodeData.path, uiStore],
+    [existingSearchCrit, nodeData, uiStore],
   );
 
   const { handleDragEnter, handleDragLeave, handleDrop } = useFileDropHandling(
@@ -311,16 +320,21 @@ const Location = observer(
       (c: any) => c.value === pathAsSearchPath(nodeData.path),
     );
 
-    const handleClick = useCallback(
-      (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
-        existingSearchCrit // toggle search
-          ? uiStore.removeSearchCriteria(existingSearchCrit)
-          : event.ctrlKey
-          ? uiStore.addSearchCriteria(pathCriteria(nodeData.path))
-          : uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
-      },
-      [existingSearchCrit, nodeData.path, uiStore],
-    );
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
+      if (existingSearchCrit) {
+        uiStore.removeSearchCriteria(existingSearchCrit);
+        uiStore.deselectLocation(nodeData);
+      } else if (event.ctrlKey) {
+        uiStore.addSearchCriteria(pathCriteria(nodeData.path));
+        uiStore.selectLocation(nodeData);
+      } else {
+        uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
+        uiStore.selectLocation(nodeData, true);
+      }
+    },
+    [existingSearchCrit, nodeData, uiStore],
+  );
 
     const fileDnD = useFileDropHandling(
       nodeData.id,
@@ -427,6 +441,7 @@ const mapDirectory = (dir: ClientSubLocation): ITreeItem => ({
   nodeData: dir,
   children: dir.subLocations.map(mapDirectory),
   isExpanded,
+  isSelected,
 });
 
 const LocationLabel = ({ nodeData, treeData }: { nodeData: any; treeData: any }) => (
@@ -441,14 +456,20 @@ interface ILocationTreeProps {
 const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
   const { locationStore, uiStore } = useStore();
   const [expansion, setExpansion] = useState<IExpansionState>({});
+  const selectedIds = useMemo(
+    () => new Set(uiStore.locationSelection),
+    [uiStore.locationSelection],
+  );
+
   const treeData: ITreeData = useMemo<ITreeData>(
     () => ({
       expansion,
       setExpansion,
       delete: onDelete,
       exclude: onExclude,
+      selectedIds,
     }),
-    [expansion, onDelete, onExclude],
+    [expansion, onDelete, onExclude, selectedIds],
   );
   const [branches, setBranches] = useState<ITreeItem[]>([]);
 
@@ -478,6 +499,7 @@ const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
         children: location.subLocations.map(mapDirectory),
         nodeData: location,
         isExpanded,
+        isSelected,
       })),
     );
   });
