@@ -10,12 +10,12 @@ import {
 describe('context-settings', () => {
   let tmpDir: string;
 
-  beforeEach(async () => {
-    tmpDir = await fse.mkdtemp(path.join(os.tmpdir(), 'onefolder-ctx-settings-'));
+  beforeEach(() => {
+    tmpDir = fse.mkdtempSync(path.join(os.tmpdir(), 'onefolder-ctx-settings-'));
   });
 
-  afterEach(async () => {
-    await fse.remove(tmpDir);
+  afterEach(() => {
+    fse.removeSync(tmpDir);
   });
 
   it('returns empty defaults when no settings file exists yet', () => {
