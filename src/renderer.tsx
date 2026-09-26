@@ -60,7 +60,13 @@ async function waitForMainContextPath(userDataPath: string): Promise<string> {
   for (;;) {
     const { lastOpenedContextPath } = readContextSettings(userDataPath);
     if (lastOpenedContextPath && (await fse.pathExists(lastOpenedContextPath))) {
-      return lastOpenedContextPath;
+      // A brand-new context (from "New Context…") starts as a 0-byte file until the main
+      // window finishes initializing its schema. Treating an empty file as ready here would
+      // let this window race the main window's PRAGMA/schema-init calls on the same file.
+      const stats = await fse.stat(lastOpenedContextPath);
+      if (stats.size > 0) {
+        return lastOpenedContextPath;
+      }
     }
     if (Date.now() >= deadline) {
       throw new Error(
