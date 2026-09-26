@@ -1,11 +1,14 @@
 import fse from 'fs-extra';
 import os from 'os';
 import path from 'path';
+import { ROOT_TAG_ID } from '../src/api/tag';
 import {
   readContextSettings,
   writeContextSettings,
   recordOpenedContext,
+  createContextPlaceholder,
 } from '../src/backend/context-settings';
+import { SqliteBackend } from '../src/backend/sqlite-backend';
 
 describe('context-settings', () => {
   let tmpDir: string;
@@ -52,5 +55,50 @@ describe('context-settings', () => {
       recordOpenedContext(tmpDir, `/drives/ctx-${i}.onefolder`);
     }
     expect(readContextSettings(tmpDir).recentContexts).toHaveLength(10);
+  });
+});
+
+describe('createContextPlaceholder (File > New Context…)', () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fse.mkdtemp(path.join(os.tmpdir(), 'onefolder-new-context-'));
+  });
+
+  afterEach(async () => {
+    await fse.remove(tmpDir);
+  });
+
+  it('creates a file that opens as a fresh context with a valid schema and root tag', async () => {
+    const contextPath = path.join(tmpDir, 'nested', 'new.onefolder');
+    createContextPlaceholder(contextPath);
+    // The file must exist before relaunch, or startup mistakes it for an unplugged drive.
+    expect(await fse.pathExists(contextPath)).toBe(true);
+
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    expect((await backend.fetchTags()).map((t) => t.id)).toEqual([ROOT_TAG_ID]);
+    expect(await backend.fetchLocations()).toEqual([]);
+    expect(await backend.countFiles()).toEqual([0, 0]);
+    backend.close();
+  });
+
+  it('never overwrites an existing file', async () => {
+    const contextPath = path.join(tmpDir, 'existing.onefolder');
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    await backend.createTag({
+      id: 'keep-me',
+      name: 'keep me',
+      dateAdded: new Date(),
+      color: '',
+      subTags: [],
+      isHidden: false,
+    });
+    backend.close();
+
+    createContextPlaceholder(contextPath);
+
+    const reopened = await SqliteBackend.init(contextPath, () => {});
+    expect((await reopened.fetchTags()).map((t) => t.id).sort()).toEqual(['keep-me', ROOT_TAG_ID]);
+    reopened.close();
   });
 });

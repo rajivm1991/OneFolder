@@ -20,7 +20,11 @@ import { createBugReport, githubUrl } from '../common/config';
 import { IS_DEV } from '../common/process';
 import { MainMessenger } from './ipc/main';
 import { WindowSystemButtonPress } from './ipc/messages';
-import { readContextSettings, recordOpenedContext } from './backend/context-settings';
+import {
+  createContextPlaceholder,
+  readContextSettings,
+  recordOpenedContext,
+} from './backend/context-settings';
 
 // TODO: change this when running in portable mode, see portable-improvements branch
 const basePath = app.getPath('userData');
@@ -233,6 +237,14 @@ function createWindow() {
             filters: [{ name: 'OneFolder Context', extensions: ['onefolder'] }],
           });
           if (chosen) {
+            // The file must exist before relaunching, or startup treats the context as being on
+            // an unplugged drive and falls back to the default context.
+            try {
+              createContextPlaceholder(chosen);
+            } catch (e) {
+              dialog.showErrorBox('Could not create context', `${chosen}\n\n${e}`);
+              return;
+            }
             switchToContext(chosen);
           }
         },
