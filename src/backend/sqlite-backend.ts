@@ -3,11 +3,14 @@ import fs from 'fs';
 
 import { shuffleArray } from '../../common/core';
 import { ConditionDTO, OrderBy, OrderDirection } from '../api/data-storage-search';
+import { DismissedDuplicateGroupDTO } from '../api/dismissed-duplicate-group';
 import { FileDTO } from '../api/file';
-import { ID } from '../api/id';
+import { generateId, ID } from '../api/id';
 import { LocationDTO } from '../api/location';
 import { FileSearchDTO } from '../api/file-search';
 import { ROOT_TAG_ID, TagDTO } from '../api/tag';
+import { VisualHashDTO } from '../api/visual-hash';
+import { DataStorage } from '../api/data-storage';
 import { filterLambda } from './backend';
 import { initSqliteSchema } from './sqlite-schema';
 
@@ -19,7 +22,7 @@ type TagRow = {
   isHidden: number;
 };
 
-export class SqliteBackend {
+export class SqliteBackend implements DataStorage {
   #db: Database.Database;
   #notifyChange: () => void;
 
@@ -395,5 +398,123 @@ export class SqliteBackend {
     const placeholders = files.map(() => '?').join(',');
     this.#db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).run(...files);
     this.#notifyChange();
+  }
+
+  async fetchDismissedDuplicateGroups(): Promise<DismissedDuplicateGroupDTO[]> {
+    const rows = this.#db
+      .prepare('SELECT * FROM dismissed_duplicate_groups ORDER BY dismissedAt DESC')
+      .all() as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      groupHash: r.groupHash,
+      algorithm: r.algorithm,
+      fileIds: r.fileIds,
+      dismissedAt: new Date(r.dismissedAt),
+      userNote: r.userNote ?? undefined,
+    }));
+  }
+
+  async createDismissedDuplicateGroup(group: DismissedDuplicateGroupDTO): Promise<void> {
+    const run = this.#db.transaction((g: DismissedDuplicateGroupDTO) => {
+      this.#db.prepare('DELETE FROM dismissed_duplicate_groups WHERE groupHash = ?').run(g.groupHash);
+      this.#db
+        .prepare(
+          'INSERT INTO dismissed_duplicate_groups (id, groupHash, algorithm, fileIds, dismissedAt, userNote) VALUES (?, ?, ?, ?, ?, ?)',
+        )
+        .run(g.id, g.groupHash, g.algorithm, g.fileIds, g.dismissedAt.toISOString(), g.userNote ?? null);
+    });
+    run(group);
+    this.#notifyChange();
+  }
+
+  async removeDismissedDuplicateGroup(groupHash: string): Promise<void> {
+    this.#db.prepare('DELETE FROM dismissed_duplicate_groups WHERE groupHash = ?').run(groupHash);
+    this.#notifyChange();
+  }
+
+  async fetchVisualHashes(absolutePaths: string[]): Promise<VisualHashDTO[]> {
+    if (absolutePaths.length === 0) {
+      return [];
+    }
+    const placeholders = absolutePaths.map(() => '?').join(',');
+    const rows = this.#db
+      .prepare(`SELECT * FROM visual_hashes WHERE absolutePath IN (${placeholders})`)
+      .all(...absolutePaths) as any[];
+    return rows.map((r) => ({
+      id: r.id,
+      absolutePath: r.absolutePath,
+      fileSize: r.fileSize,
+      dateModified: new Date(r.dateModified),
+      hashType: r.hashType,
+      hash: r.hash,
+      dateComputed: new Date(r.dateComputed),
+      thumbnailPath: r.thumbnailPath ?? undefined,
+    }));
+  }
+
+  async saveVisualHashes(hashes: VisualHashDTO[]): Promise<void> {
+    const run = this.#db.transaction((items: VisualHashDTO[]) => {
+      const upsert = this.#db.prepare(`
+        INSERT INTO visual_hashes (id, absolutePath, fileSize, dateModified, hashType, hash, dateComputed, thumbnailPath)
+        VALUES (@id, @absolutePath, @fileSize, @dateModified, @hashType, @hash, @dateComputed, @thumbnailPath)
+        ON CONFLICT(absolutePath) DO UPDATE SET
+          fileSize=excluded.fileSize, dateModified=excluded.dateModified, hashType=excluded.hashType,
+          hash=excluded.hash, dateComputed=excluded.dateComputed, thumbnailPath=excluded.thumbnailPath
+      `);
+      for (const h of items) {
+        upsert.run({
+          id: h.id ?? generateId(),
+          absolutePath: h.absolutePath,
+          fileSize: h.fileSize,
+          dateModified: h.dateModified.toISOString(),
+          hashType: h.hashType,
+          hash: h.hash,
+          dateComputed: h.dateComputed.toISOString(),
+          thumbnailPath: h.thumbnailPath ?? null,
+        });
+      }
+    });
+    run(hashes);
+    this.#notifyChange();
+  }
+
+  async removeVisualHashes(absolutePaths: string[]): Promise<void> {
+    if (absolutePaths.length === 0) {
+      return;
+    }
+    const placeholders = absolutePaths.map(() => '?').join(',');
+    this.#db.prepare(`DELETE FROM visual_hashes WHERE absolutePath IN (${placeholders})`).run(...absolutePaths);
+    this.#notifyChange();
+  }
+
+  async clearVisualHashCache(): Promise<void> {
+    this.#db.prepare('DELETE FROM visual_hashes').run();
+    this.#notifyChange();
+  }
+
+  async countFiles(): Promise<[fileCount: number, untaggedFileCount: number]> {
+    const fileCount = (this.#db.prepare('SELECT COUNT(*) as c FROM files').get() as { c: number }).c;
+    const untaggedFileCount = (
+      this.#db
+        .prepare(
+          'SELECT COUNT(*) as c FROM files WHERE id NOT IN (SELECT DISTINCT file_id FROM file_tags)',
+        )
+        .get() as { c: number }
+    ).c;
+    return [fileCount, untaggedFileCount];
+  }
+
+  async clearFilesOnly(): Promise<void> {
+    const run = this.#db.transaction(() => {
+      this.#db.prepare('DELETE FROM files').run();
+      this.#db.prepare('DELETE FROM visual_hashes').run();
+      this.#db.prepare('DELETE FROM dismissed_duplicate_groups').run();
+    });
+    run();
+    this.#notifyChange();
+  }
+
+  async clear(): Promise<void> {
+    this.#db.close();
   }
 }

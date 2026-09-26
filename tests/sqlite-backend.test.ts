@@ -7,6 +7,8 @@ import { FileSearchDTO } from '../src/api/file-search';
 import { SqliteBackend } from '../src/backend/sqlite-backend';
 import { OrderDirection } from '../src/api/data-storage-search';
 import { FileDTO } from '../src/api/file';
+import { DismissedDuplicateGroupDTO } from '../src/api/dismissed-duplicate-group';
+import { VisualHashDTO } from '../src/api/visual-hash';
 
 describe('SqliteBackend', () => {
   let tmpDir: string;
@@ -251,5 +253,101 @@ describe('SqliteBackend', () => {
     ]);
     const files = await backend.fetchFiles('id', OrderDirection.Asc);
     expect(files.map((f) => f.id).sort()).toEqual(['f1', 'f2']);
+  });
+
+  it('creates, fetches and removes a dismissed duplicate group', async () => {
+    const backend = await initBackend();
+    const group: DismissedDuplicateGroupDTO = {
+      id: 'g1',
+      groupHash: 'hash1',
+      algorithm: 'aHash',
+      fileIds: JSON.stringify(['f1', 'f2']),
+      dismissedAt: new Date(),
+    };
+    await backend.createDismissedDuplicateGroup(group);
+    expect(await backend.fetchDismissedDuplicateGroups()).toHaveLength(1);
+    await backend.removeDismissedDuplicateGroup('hash1');
+    expect(await backend.fetchDismissedDuplicateGroups()).toHaveLength(0);
+  });
+
+  it('replaces an existing dismissed duplicate group with the same groupHash', async () => {
+    const backend = await initBackend();
+    const group: DismissedDuplicateGroupDTO = {
+      id: 'g1',
+      groupHash: 'hash1',
+      algorithm: 'aHash',
+      fileIds: JSON.stringify(['f1']),
+      dismissedAt: new Date(),
+    };
+    await backend.createDismissedDuplicateGroup(group);
+    await backend.createDismissedDuplicateGroup({ ...group, id: 'g2', algorithm: 'dctHash' });
+    const groups = await backend.fetchDismissedDuplicateGroups();
+    expect(groups).toHaveLength(1);
+    expect(groups[0].algorithm).toBe('dctHash');
+  });
+
+  it('saves, fetches and removes visual hashes', async () => {
+    const backend = await initBackend();
+    const hash: VisualHashDTO = {
+      absolutePath: '/drives/school/a.jpg',
+      fileSize: 100,
+      dateModified: new Date(),
+      hashType: 'aHash',
+      hash: 'abc123',
+      dateComputed: new Date(),
+    };
+    await backend.saveVisualHashes([hash]);
+    expect(await backend.fetchVisualHashes(['/drives/school/a.jpg'])).toHaveLength(1);
+    await backend.removeVisualHashes(['/drives/school/a.jpg']);
+    expect(await backend.fetchVisualHashes(['/drives/school/a.jpg'])).toHaveLength(0);
+  });
+
+  it('clearVisualHashCache empties the visual hash table only', async () => {
+    const backend = await initBackend();
+    await backend.saveVisualHashes([
+      {
+        absolutePath: '/a.jpg',
+        fileSize: 1,
+        dateModified: new Date(),
+        hashType: 'aHash',
+        hash: 'x',
+        dateComputed: new Date(),
+      },
+    ]);
+    await backend.createTag(mockTag);
+    await backend.clearVisualHashCache();
+    expect(await backend.fetchVisualHashes(['/a.jpg'])).toHaveLength(0);
+    expect(await backend.fetchTags()).toHaveLength(2);
+  });
+
+  it('countFiles reports total and untagged counts', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg', tags: ['tag1'] }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/f2.jpg', tags: [] }),
+    ]);
+    const [total, untagged] = await backend.countFiles();
+    expect(total).toBe(2);
+    expect(untagged).toBe(1);
+  });
+
+  it('clearFilesOnly removes files, visual hashes and dismissed groups but keeps tags/locations', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    await backend.createLocation({
+      id: 'loc1',
+      path: '/drives/school',
+      dateAdded: new Date(),
+      subLocations: [],
+      index: 0,
+    });
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+    ]);
+    await backend.clearFilesOnly();
+    expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(0);
+    expect(await backend.fetchTags()).toHaveLength(2);
+    expect(await backend.fetchLocations()).toHaveLength(1);
   });
 });
