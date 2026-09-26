@@ -1,5 +1,5 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
 
 export const CONTEXT_SETTINGS_FILENAME = 'context-settings.json';
 export const MAX_RECENT_CONTEXTS = 10;

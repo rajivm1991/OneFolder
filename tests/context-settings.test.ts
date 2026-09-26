@@ -1,23 +1,21 @@
+import fse from 'fs-extra';
+import os from 'os';
+import path from 'path';
 import {
   readContextSettings,
   writeContextSettings,
   recordOpenedContext,
 } from '../src/backend/context-settings';
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
 
 describe('context-settings', () => {
   let tmpDir: string;
 
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'onefolder-ctx-settings-'));
+  beforeEach(async () => {
+    tmpDir = await fse.mkdtemp(path.join(os.tmpdir(), 'onefolder-ctx-settings-'));
   });
 
-  afterEach(() => {
-    if (fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+  afterEach(async () => {
+    await fse.remove(tmpDir);
   });
 
   it('returns empty defaults when no settings file exists yet', () => {
