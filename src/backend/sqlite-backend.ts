@@ -515,6 +515,17 @@ export class SqliteBackend implements DataStorage {
   }
 
   async clear(): Promise<void> {
+    const run = this.#db.transaction(() => {
+      this.#db.prepare('DELETE FROM file_tags').run();
+      this.#db.prepare('DELETE FROM files').run();
+      this.#db.prepare('DELETE FROM tag_subtags').run();
+      this.#db.prepare('DELETE FROM tags').run();
+      this.#db.prepare('DELETE FROM locations').run();
+      this.#db.prepare('DELETE FROM searches').run();
+      this.#db.prepare('DELETE FROM dismissed_duplicate_groups').run();
+      this.#db.prepare('DELETE FROM visual_hashes').run();
+    });
+    run();
     this.#db.close();
   }
 }

@@ -27,6 +27,12 @@ describe('SqliteBackend', () => {
     return SqliteBackend.init(contextPath, () => {});
   }
 
+  async function initBackendWithPath(): Promise<{ backend: SqliteBackend; contextPath: string }> {
+    const contextPath = path.join(tmpDir, `context-${counter++}.onefolder`);
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    return { backend, contextPath };
+  }
+
   const mockTag: TagDTO = {
     id: 'tag1',
     name: 'tag1 name',
@@ -349,5 +355,27 @@ describe('SqliteBackend', () => {
     expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(0);
     expect(await backend.fetchTags()).toHaveLength(2);
     expect(await backend.fetchLocations()).toHaveLength(1);
+  });
+
+  it('clear() wipes all data on disk, so reopening the same context file is a fresh library', async () => {
+    const { backend, contextPath } = await initBackendWithPath();
+    await backend.createTag(mockTag);
+    await backend.createLocation({
+      id: 'loc1',
+      path: '/drives/school',
+      dateAdded: new Date(),
+      subLocations: [],
+      index: 0,
+    });
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+    ]);
+    await backend.clear();
+
+    const reopened = await SqliteBackend.init(contextPath, () => {});
+    expect(await reopened.fetchTags()).toHaveLength(1);
+    expect((await reopened.fetchTags())[0].id).toBe(ROOT_TAG_ID);
+    expect(await reopened.fetchLocations()).toHaveLength(0);
+    expect(await reopened.fetchFiles('id', OrderDirection.Asc)).toHaveLength(0);
   });
 });
