@@ -99,12 +99,12 @@ async function main(): Promise<void> {
 async function runMainApp(contextPath: string, userDataPath: string, root: Root): Promise<void> {
   recordOpenedContext(userDataPath, contextPath);
 
-  const defaultBackupDirectory = await RendererMessenger.getDefaultBackupDirectory();
-  const backup = new SqliteBackupScheduler(contextPath, defaultBackupDirectory);
-  const [backend] = await Promise.all([
-    SqliteBackend.init(contextPath, () => backup.schedule()),
-    fse.ensureDir(defaultBackupDirectory),
-  ]);
+  // The scheduler backs up through the backend's live connection, so the backend comes first.
+  // Nothing calls notifyChange during init, so `backup` is always set by the time it's needed.
+  let backup: SqliteBackupScheduler | undefined;
+  const backend = await SqliteBackend.init(contextPath, () => backup?.schedule());
+  backup = new SqliteBackupScheduler(backend, await RendererMessenger.getDefaultBackupDirectory());
+  await fse.ensureDir(backup.backupDirectory);
 
   const rootStore = await RootStore.main(backend, backup);
 
@@ -273,7 +273,13 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
 
 async function runPreviewApp(contextPath: string, root: Root): Promise<void> {
   const backend = await SqliteBackend.init(contextPath, () => {});
-  const rootStore = await RootStore.preview(backend, new SqliteBackupScheduler(contextPath, ''));
+  // The preview window never schedules backups, but point it at the same per-context directory
+  // as the main window for consistency.
+  const backup = new SqliteBackupScheduler(
+    backend,
+    await RendererMessenger.getDefaultBackupDirectory(),
+  );
+  const rootStore = await RootStore.preview(backend, backup);
 
   RendererMessenger.initialized();
 

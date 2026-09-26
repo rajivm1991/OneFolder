@@ -579,4 +579,22 @@ export class SqliteBackend implements DataStorage {
       throw new Error('Could not checkpoint the context file: it is busy in another connection.');
     }
   }
+
+  /** Online backup of the live context (including not-yet-checkpointed WAL data) to `targetPath`. */
+  async backupTo(targetPath: string): Promise<void> {
+    await this.#db.backup(targetPath);
+    // The copy inherits WAL mode from the live file, so merely opening it (e.g. to peek at it)
+    // would create -wal/-shm sidecars beside it. Store backups as plain self-contained files;
+    // initSqliteSchema switches a restored file back to WAL when it's next opened as a context.
+    const copy = new Database(targetPath);
+    try {
+      copy.pragma('journal_mode = DELETE');
+    } finally {
+      copy.close();
+    }
+  }
+
+  get contextPath(): string {
+    return this.#db.name;
+  }
 }
