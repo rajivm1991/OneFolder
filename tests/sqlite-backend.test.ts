@@ -1,3 +1,4 @@
+import Database from 'better-sqlite3';
 import fse from 'fs-extra';
 import os from 'os';
 import path from 'path';
@@ -236,6 +237,66 @@ describe('SqliteBackend', () => {
     const [saved] = await backend.fetchFilesByID(['f1']);
     expect(saved.lat).toBe(48.8566);
     expect(saved.lng).toBe(2.3522);
+  });
+
+  it('preserves the three GPS states (not checked / checked-none / coordinate) across a round-trip', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'unchecked', absolutePath: '/drives/school/u.jpg' }),
+    ]);
+    await backend.saveFiles([
+      createMockFile({ id: 'none', absolutePath: '/drives/school/n.jpg', lat: null, lng: 5 }),
+      createMockFile({ id: 'real', absolutePath: '/drives/school/r.jpg', lat: 12.5, lng: -3.25 }),
+      createMockFile({ id: 'unchecked2', absolutePath: '/drives/school/u2.jpg' }),
+    ]);
+    const byId = new Map(
+      (await backend.fetchFiles('id', OrderDirection.Asc)).map((f) => [f.id, f] as const),
+    );
+    expect(byId.get('unchecked')!.lat).toBeUndefined();
+    expect(byId.get('unchecked')!.lng).toBeUndefined();
+    expect(byId.get('unchecked2')!.lat).toBeUndefined();
+    expect(byId.get('unchecked2')!.lng).toBeUndefined();
+    expect(byId.get('none')!.lat).toBeNull();
+    expect(byId.get('none')!.lng).toBe(5);
+    expect(byId.get('real')!.lat).toBe(12.5);
+    expect(byId.get('real')!.lng).toBe(-3.25);
+  });
+
+  it('adds the GPS checked columns to a context file created before they existed', async () => {
+    const contextPath = path.join(tmpDir, 'old-format.onefolder');
+    const old = new Database(contextPath);
+    old.exec(`
+      CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL, dateAdded TEXT NOT NULL,
+        color TEXT NOT NULL, isHidden INTEGER NOT NULL);
+      CREATE TABLE files (id TEXT PRIMARY KEY, ino TEXT NOT NULL, locationId TEXT NOT NULL,
+        relativePath TEXT NOT NULL, absolutePath TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+        extension TEXT NOT NULL, size INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+        dateAdded TEXT NOT NULL, dateModified TEXT NOT NULL, dateCreated TEXT NOT NULL,
+        dateLastIndexed TEXT NOT NULL, annotations TEXT NOT NULL, lat REAL, lng REAL);
+    `);
+    const now = new Date().toISOString();
+    const insert = old.prepare(
+      `INSERT INTO files VALUES (?, '1', 'loc1', ?, ?, 'a.jpg', 'jpg', 1, 1, 1, ?, ?, ?, ?, '', ?, ?)`,
+    );
+    insert.run('legacyNull', 'a.jpg', '/d/a.jpg', now, now, now, now, null, null);
+    insert.run('legacyReal', 'b.jpg', '/d/b.jpg', now, now, now, now, 1.5, 2.5);
+    old.close();
+
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    const byId = new Map(
+      (await backend.fetchFiles('id', OrderDirection.Asc)).map((f) => [f.id, f] as const),
+    );
+    // A legacy row with no checked flag and no coordinate is re-queued for GPS backfill.
+    expect(byId.get('legacyNull')!.lat).toBeUndefined();
+    expect(byId.get('legacyNull')!.lng).toBeUndefined();
+    expect(byId.get('legacyReal')!.lat).toBe(1.5);
+    expect(byId.get('legacyReal')!.lng).toBe(2.5);
+
+    await backend.saveFiles([
+      createMockFile({ id: 'new', absolutePath: '/d/c.jpg', lat: null, lng: null }),
+    ]);
+    const [saved] = await backend.fetchFilesByID(['new']);
+    expect(saved.lat).toBeNull();
   });
 
   it('createFilesFromPath escapes LIKE metacharacters in the path when detecting duplicates', async () => {

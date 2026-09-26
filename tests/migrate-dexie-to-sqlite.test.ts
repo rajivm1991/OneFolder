@@ -72,6 +72,9 @@ describe('migrateDexieToSqlite', () => {
     const files = await sqlite.fetchFiles('id' as any, 0);
     expect(files).toHaveLength(1);
     expect(files[0].tags).toEqual(['tag1']);
+    // Never-checked GPS state survives migration, so GPS backfill still picks the file up.
+    expect(files[0].lat).toBeUndefined();
+    expect(files[0].lng).toBeUndefined();
   });
 
   it("carries the legacy root tag's subTags across, so the migrated tag tree is not empty", async () => {

@@ -22,6 +22,29 @@ type TagRow = {
   isHidden: number;
 };
 
+/**
+ * FileDTO.lat/lng are three-state: undefined = GPS not yet checked, null = checked and none found,
+ * number = coordinate. A REAL column only holds null/number, so a separate *Checked column keeps
+ * the distinction. Rows from older context files have no checked flag (NULL): if they also have
+ * no coordinate, treat them as not yet checked so GPS backfill looks at them again, rather than
+ * permanently skipping them.
+ */
+function gpsFromRow(value: number | null, checked: number | null): number | null | undefined {
+  if (checked === 0 || (checked === null && value === null)) {
+    return undefined;
+  }
+  return value;
+}
+
+function gpsParams(file: FileDTO) {
+  return {
+    lat: file.lat ?? null,
+    lng: file.lng ?? null,
+    latChecked: file.lat === undefined ? 0 : 1,
+    lngChecked: file.lng === undefined ? 0 : 1,
+  };
+}
+
 export class SqliteBackend implements DataStorage {
   #db: Database.Database;
   #notifyChange: () => void;
@@ -262,8 +285,8 @@ export class SqliteBackend implements DataStorage {
       dateCreated: new Date(row.dateCreated),
       dateLastIndexed: new Date(row.dateLastIndexed),
       annotations: row.annotations,
-      lat: row.lat,
-      lng: row.lng,
+      lat: gpsFromRow(row.lat, row.latChecked),
+      lng: gpsFromRow(row.lng, row.lngChecked),
       tags: tagRows.map((r) => r.tag_id),
     };
   }
@@ -329,16 +352,18 @@ export class SqliteBackend implements DataStorage {
     const run = this.#db.transaction((items: FileDTO[]) => {
       const upsert = this.#db.prepare(`
         INSERT INTO files (id, ino, locationId, relativePath, absolutePath, name, extension, size, width, height,
-                            dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng)
+                            dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng,
+                            latChecked, lngChecked)
         VALUES (@id, @ino, @locationId, @relativePath, @absolutePath, @name, @extension, @size, @width, @height,
-                @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng)
+                @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng,
+                @latChecked, @lngChecked)
         ON CONFLICT(id) DO UPDATE SET
           ino=excluded.ino, locationId=excluded.locationId, relativePath=excluded.relativePath,
           absolutePath=excluded.absolutePath, name=excluded.name, extension=excluded.extension,
           size=excluded.size, width=excluded.width, height=excluded.height, dateAdded=excluded.dateAdded,
           dateModified=excluded.dateModified, dateCreated=excluded.dateCreated,
           dateLastIndexed=excluded.dateLastIndexed, annotations=excluded.annotations,
-          lat=excluded.lat, lng=excluded.lng
+          lat=excluded.lat, lng=excluded.lng, latChecked=excluded.latChecked, lngChecked=excluded.lngChecked
       `);
       for (const file of items) {
         upsert.run({
@@ -347,8 +372,7 @@ export class SqliteBackend implements DataStorage {
           dateModified: file.dateModified.toISOString(),
           dateCreated: file.dateCreated.toISOString(),
           dateLastIndexed: file.dateLastIndexed.toISOString(),
-          lat: file.lat ?? null,
-          lng: file.lng ?? null,
+          ...gpsParams(file),
         });
         this.#writeFileTags(file.id, file.tags);
       }
@@ -370,9 +394,11 @@ export class SqliteBackend implements DataStorage {
       const toInsert = items.filter((f) => !existing.has(f.absolutePath));
       const insert = this.#db.prepare(`
         INSERT INTO files (id, ino, locationId, relativePath, absolutePath, name, extension, size, width, height,
-                            dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng)
+                            dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng,
+                            latChecked, lngChecked)
         VALUES (@id, @ino, @locationId, @relativePath, @absolutePath, @name, @extension, @size, @width, @height,
-                @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng)
+                @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng,
+                @latChecked, @lngChecked)
       `);
       for (const file of toInsert) {
         insert.run({
@@ -381,8 +407,7 @@ export class SqliteBackend implements DataStorage {
           dateModified: file.dateModified.toISOString(),
           dateCreated: file.dateCreated.toISOString(),
           dateLastIndexed: file.dateLastIndexed.toISOString(),
-          lat: file.lat ?? null,
-          lng: file.lng ?? null,
+          ...gpsParams(file),
         });
         this.#writeFileTags(file.id, file.tags);
       }

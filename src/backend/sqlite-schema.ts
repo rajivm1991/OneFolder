@@ -54,7 +54,11 @@ export function initSqliteSchema(db: Database.Database): void {
       dateLastIndexed TEXT NOT NULL,
       annotations TEXT NOT NULL,
       lat REAL,
-      lng REAL
+      lng REAL,
+      -- 0 = GPS not yet checked (DTO lat/lng undefined), 1 = checked (lat/lng is null or a number).
+      -- NULL only on rows written before these columns existed; see SqliteBackend#rowToFile.
+      latChecked INTEGER,
+      lngChecked INTEGER
     );
     CREATE INDEX IF NOT EXISTS idx_files_locationId ON files(locationId);
 
@@ -85,4 +89,21 @@ export function initSqliteSchema(db: Database.Database): void {
       thumbnailPath TEXT
     );
   `);
+
+  // CREATE TABLE IF NOT EXISTS never adds columns to an existing table, so context files created
+  // before a column was introduced need it added explicitly.
+  addColumnIfMissing(db, 'files', 'latChecked', 'INTEGER');
+  addColumnIfMissing(db, 'files', 'lngChecked', 'INTEGER');
+}
+
+function addColumnIfMissing(
+  db: Database.Database,
+  table: string,
+  column: string,
+  type: string,
+): void {
+  const columns = db.pragma(`table_info(${table})`) as { name: string }[];
+  if (!columns.some((c) => c.name === column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+  }
 }
