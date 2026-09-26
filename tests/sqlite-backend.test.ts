@@ -229,4 +229,27 @@ describe('SqliteBackend', () => {
     expect(saved.lat).toBe(48.8566);
     expect(saved.lng).toBe(2.3522);
   });
+
+  it('createFilesFromPath escapes LIKE metacharacters in the path when detecting duplicates', async () => {
+    const backend = await initBackend();
+    const file = createMockFile({
+      id: 'f1',
+      absolutePath: '/drives/100%folder/f1.jpg',
+    });
+    await backend.createFilesFromPath('/drives/100%folder', [file]);
+    await backend.createFilesFromPath('/drives/100%folder', [file]);
+    expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(1);
+  });
+
+  it('createFilesFromPath does not over-match unrelated paths due to unescaped % wildcard', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/100Xfolder', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/100Xfolder/f1.jpg' }),
+    ]);
+    await backend.createFilesFromPath('/drives/100%folder', [
+      createMockFile({ id: 'f2', absolutePath: '/drives/100%folder/f2.jpg' }),
+    ]);
+    const files = await backend.fetchFiles('id', OrderDirection.Asc);
+    expect(files.map((f) => f.id).sort()).toEqual(['f1', 'f2']);
+  });
 });

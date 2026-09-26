@@ -356,11 +356,12 @@ export class SqliteBackend {
 
   async createFilesFromPath(path: string, files: FileDTO[]): Promise<void> {
     const run = this.#db.transaction((prefix: string, items: FileDTO[]) => {
+      const escapedPrefix = prefix.replace(/[\\%_]/g, '\\$&');
       const existing = new Set(
         (
           this.#db
-            .prepare(`SELECT absolutePath FROM files WHERE absolutePath LIKE ? || '%'`)
-            .all(prefix) as { absolutePath: string }[]
+            .prepare(`SELECT absolutePath FROM files WHERE absolutePath LIKE ? || '%' ESCAPE '\\'`)
+            .all(escapedPrefix) as { absolutePath: string }[]
         ).map((r) => r.absolutePath),
       );
       const toInsert = items.filter((f) => !existing.has(f.absolutePath));
