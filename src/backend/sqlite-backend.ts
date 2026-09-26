@@ -79,8 +79,9 @@ export class SqliteBackend implements DataStorage {
 
     const tagCount = (db.prepare('SELECT COUNT(*) as c FROM tags').get() as { c: number }).c;
     if (tagCount === 0) {
+      // OR IGNORE: another connection may have seeded root between the count and this insert.
       db.prepare(
-        'INSERT INTO tags (id, name, dateAdded, color, isHidden) VALUES (?, ?, ?, ?, ?)',
+        'INSERT OR IGNORE INTO tags (id, name, dateAdded, color, isHidden) VALUES (?, ?, ?, ?, ?)',
       ).run(ROOT_TAG_ID, 'Root', new Date().toISOString(), '', 0);
     }
     void isNewFile; // reserved for future "new context" telemetry/logging; not branched on today
@@ -551,6 +552,31 @@ export class SqliteBackend implements DataStorage {
       this.#db.prepare('DELETE FROM visual_hashes').run();
     });
     run();
+    // Best effort: the app relaunches right after clearing, so don't fail the clear itself if
+    // another window's connection happens to block the checkpoint.
+    try {
+      this.checkpoint();
+    } catch (e) {
+      console.warn('Could not checkpoint context file before closing', e);
+    }
     this.#db.close();
+  }
+
+  /**
+   * Folds the write-ahead log back into the context file and closes the connection, so no `-wal`
+   * sidecar is left travelling separately from the (portable) `.onefolder` file. Throws, leaving
+   * the connection open, if another connection blocked the checkpoint from completing.
+   */
+  close(): void {
+    this.checkpoint();
+    this.#db.close();
+  }
+
+  /** TRUNCATE checkpoint: everything in the WAL is written to the main file and the WAL emptied. */
+  checkpoint(): void {
+    const [result] = this.#db.pragma('wal_checkpoint(TRUNCATE)') as { busy: number }[];
+    if (result && result.busy !== 0) {
+      throw new Error('Could not checkpoint the context file: it is busy in another connection.');
+    }
   }
 }

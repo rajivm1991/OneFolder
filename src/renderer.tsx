@@ -29,8 +29,8 @@ import { migrateDexieToSqlite } from './backend/migrate-dexie-to-sqlite';
 import { readContextSettings, recordOpenedContext } from './backend/context-settings';
 import { DB_NAME } from './backend/config';
 
-async function resolveContextPath(): Promise<string> {
-  const userDataPath = await RendererMessenger.getPath('userData');
+/** Main window only: picks the context to open, migrating the legacy library on first run. */
+async function resolveMainContextPath(userDataPath: string): Promise<string> {
   const settings = readContextSettings(userDataPath);
 
   if (settings.lastOpenedContextPath && (await fse.pathExists(settings.lastOpenedContextPath))) {
@@ -42,6 +42,35 @@ async function resolveContextPath(): Promise<string> {
   const defaultContextPath = path.join(userDataPath, 'default.onefolder');
   await migrateDexieToSqlite(DB_NAME, defaultContextPath);
   return defaultContextPath;
+}
+
+// Generous, since the window waiting on it is hidden: on first launch the main window may be
+// migrating a large legacy library before it records the context.
+const PREVIEW_CONTEXT_WAIT_MS = 60_000;
+const PREVIEW_CONTEXT_POLL_MS = 250;
+
+/**
+ * Preview window only: never migrates or creates a context (that raced the main window on first
+ * launch and corrupted the migration). Instead waits for the context that the main window records
+ * once it has opened it successfully, which on a normal launch is already there.
+ */
+async function waitForMainContextPath(userDataPath: string): Promise<string> {
+  const deadline = Date.now() + PREVIEW_CONTEXT_WAIT_MS;
+  for (;;) {
+    const { lastOpenedContextPath } = readContextSettings(userDataPath);
+    if (lastOpenedContextPath && (await fse.pathExists(lastOpenedContextPath))) {
+      return lastOpenedContextPath;
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Preview window: no context file was opened by the main window within ${PREVIEW_CONTEXT_WAIT_MS} ms` +
+          (lastOpenedContextPath
+            ? ` (last opened context "${lastOpenedContextPath}" is missing)`
+            : ''),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, PREVIEW_CONTEXT_POLL_MS));
+  }
 }
 
 async function main(): Promise<void> {
@@ -57,18 +86,17 @@ async function main(): Promise<void> {
 
   root.render(<SplashScreen />);
 
-  const contextPath = await resolveContextPath();
+  const userDataPath = await RendererMessenger.getPath('userData');
 
   if (!IS_PREVIEW_WINDOW) {
-    await runMainApp(contextPath, root);
+    await runMainApp(await resolveMainContextPath(userDataPath), userDataPath, root);
   } else {
-    await runPreviewApp(contextPath, root);
+    await runPreviewApp(await waitForMainContextPath(userDataPath), root);
   }
   console.groupEnd();
 }
 
-async function runMainApp(contextPath: string, root: Root): Promise<void> {
-  const userDataPath = await RendererMessenger.getPath('userData');
+async function runMainApp(contextPath: string, userDataPath: string, root: Root): Promise<void> {
   recordOpenedContext(userDataPath, contextPath);
 
   const defaultBackupDirectory = await RendererMessenger.getDefaultBackupDirectory();

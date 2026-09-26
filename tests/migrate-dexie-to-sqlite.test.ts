@@ -1,3 +1,4 @@
+import fs from 'fs';
 import fse from 'fs-extra';
 import os from 'os';
 import path from 'path';
@@ -99,6 +100,60 @@ describe('migrateDexieToSqlite', () => {
     const sqlite = await SqliteBackend.init(targetPath, () => {});
     const root = (await sqlite.fetchTags()).find((t) => t.id === ROOT_TAG_ID);
     expect(root?.subTags).toEqual(['tag1']);
+  });
+
+  it('survives two concurrent migrations to the same target, leaving one valid context file', async () => {
+    const dexieDbName = `MigrateTest_${counter++}`;
+    const db = dbInit(dexieDbName);
+    const legacy = await Backend.init(db, () => {});
+    await legacy.createTag({
+      id: 'tag1',
+      name: 'Favorite',
+      dateAdded: new Date(),
+      color: '',
+      subTags: [],
+      isHidden: false,
+    });
+    await legacy.createLocation({
+      id: 'loc1',
+      path: '/old/library',
+      dateAdded: new Date(),
+      subLocations: [],
+      index: 0,
+    });
+
+    const targetPath = path.join(tmpDir, 'default.onefolder');
+    const results = await Promise.all([
+      migrateDexieToSqlite(dexieDbName, targetPath),
+      migrateDexieToSqlite(dexieDbName, targetPath),
+    ]);
+    // Exactly one of the two publishes the file; the other notices it lost the race.
+    expect(results.filter(Boolean)).toHaveLength(1);
+
+    const sqlite = await SqliteBackend.init(targetPath, () => {});
+    expect((await sqlite.fetchTags()).map((t) => t.id).sort()).toEqual(['root', 'tag1']);
+    expect(await sqlite.fetchLocations()).toHaveLength(1);
+
+    // Neither migration leaves its temp file (or its temp file's WAL sidecars) behind.
+    expect((await fse.readdir(tmpDir)).filter((name) => name.includes('.tmp-'))).toEqual([]);
+  });
+
+  it('falls back to a rename on filesystems without hard link support', async () => {
+    const dexieDbName = `MigrateTest_${counter++}`;
+    dbInit(dexieDbName);
+    const linkSpy = jest.spyOn(fs, 'linkSync').mockImplementation(() => {
+      throw Object.assign(new Error('operation not permitted'), { code: 'EPERM' });
+    });
+    try {
+      const targetPath = path.join(tmpDir, 'default.onefolder');
+      expect(await migrateDexieToSqlite(dexieDbName, targetPath)).toBe(true);
+      expect(linkSpy).toHaveBeenCalled();
+      const sqlite = await SqliteBackend.init(targetPath, () => {});
+      expect((await sqlite.fetchTags()).map((t) => t.id)).toEqual(['root']);
+      expect((await fse.readdir(tmpDir)).filter((name) => name.includes('.tmp-'))).toEqual([]);
+    } finally {
+      linkSpy.mockRestore();
+    }
   });
 
   it('is a no-op if the target context file already exists', async () => {
