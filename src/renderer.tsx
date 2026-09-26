@@ -26,7 +26,8 @@ import { PREFERENCES_STORAGE_KEY } from './frontend/stores/UiStore';
 import { SqliteBackend } from './backend/sqlite-backend';
 import { SqliteBackupScheduler } from './backend/sqlite-backup-scheduler';
 import { migrateDexieToSqlite } from './backend/migrate-dexie-to-sqlite';
-import { readContextSettings, recordOpenedContext } from './backend/context-settings';
+import { readContextSettings } from './backend/context-settings';
+import { openAndRecordContext } from './backend/open-context';
 import { DB_NAME } from './backend/config';
 
 /** Main window only: picks the context to open, migrating the legacy library on first run. */
@@ -97,12 +98,11 @@ async function main(): Promise<void> {
 }
 
 async function runMainApp(contextPath: string, userDataPath: string, root: Root): Promise<void> {
-  recordOpenedContext(userDataPath, contextPath);
-
   // The scheduler backs up through the backend's live connection, so the backend comes first.
   // Nothing calls notifyChange during init, so `backup` is always set by the time it's needed.
+  // The context is only recorded as last opened once it has opened successfully.
   let backup: SqliteBackupScheduler | undefined;
-  const backend = await SqliteBackend.init(contextPath, () => backup?.schedule());
+  const backend = await openAndRecordContext(userDataPath, contextPath, () => backup?.schedule());
   backup = new SqliteBackupScheduler(backend, await RendererMessenger.getDefaultBackupDirectory());
   await fse.ensureDir(backup.backupDirectory);
 
