@@ -1,10 +1,14 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 
+import { shuffleArray } from '../../common/core';
+import { ConditionDTO, OrderBy, OrderDirection } from '../api/data-storage-search';
+import { FileDTO } from '../api/file';
 import { ID } from '../api/id';
 import { LocationDTO } from '../api/location';
 import { FileSearchDTO } from '../api/file-search';
 import { ROOT_TAG_ID, TagDTO } from '../api/tag';
+import { filterLambda } from './backend';
 import { initSqliteSchema } from './sqlite-schema';
 
 type TagRow = {
@@ -232,6 +236,163 @@ export class SqliteBackend {
 
   async removeSearch(search: ID): Promise<void> {
     this.#db.prepare('DELETE FROM searches WHERE id = ?').run(search);
+    this.#notifyChange();
+  }
+
+  #rowToFile(row: any): FileDTO {
+    const tagRows = this.#db
+      .prepare('SELECT tag_id FROM file_tags WHERE file_id = ?')
+      .all(row.id) as { tag_id: string }[];
+    return {
+      id: row.id,
+      ino: row.ino,
+      locationId: row.locationId,
+      relativePath: row.relativePath,
+      absolutePath: row.absolutePath,
+      name: row.name,
+      extension: row.extension,
+      size: row.size,
+      width: row.width,
+      height: row.height,
+      dateAdded: new Date(row.dateAdded),
+      dateModified: new Date(row.dateModified),
+      dateCreated: new Date(row.dateCreated),
+      dateLastIndexed: new Date(row.dateLastIndexed),
+      annotations: row.annotations,
+      lat: row.lat,
+      lng: row.lng,
+      tags: tagRows.map((r) => r.tag_id),
+    };
+  }
+
+  #writeFileTags(fileId: string, tags: string[]): void {
+    this.#db.prepare('DELETE FROM file_tags WHERE file_id = ?').run(fileId);
+    const insert = this.#db.prepare('INSERT INTO file_tags (file_id, tag_id) VALUES (?, ?)');
+    tags.forEach((tagId) => insert.run(fileId, tagId));
+  }
+
+  #sortAndOrder(files: FileDTO[], order: OrderBy<FileDTO>, fileOrder: OrderDirection): FileDTO[] {
+    if (order === 'random') {
+      return shuffleArray(files);
+    }
+    const sorted = [...files].sort((a, b) => {
+      const av = (a as any)[order];
+      const bv = (b as any)[order];
+      if (av < bv) return -1;
+      if (av > bv) return 1;
+      return 0;
+    });
+    return fileOrder === OrderDirection.Desc ? sorted.reverse() : sorted;
+  }
+
+  async fetchFiles(order: OrderBy<FileDTO>, fileOrder: OrderDirection): Promise<FileDTO[]> {
+    const rows = this.#db.prepare('SELECT * FROM files').all() as any[];
+    return this.#sortAndOrder(rows.map((r) => this.#rowToFile(r)), order, fileOrder);
+  }
+
+  async fetchFilesByID(ids: ID[]): Promise<FileDTO[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+    const placeholders = ids.map(() => '?').join(',');
+    const rows = this.#db
+      .prepare(`SELECT * FROM files WHERE id IN (${placeholders})`)
+      .all(...ids) as any[];
+    return rows.map((r) => this.#rowToFile(r));
+  }
+
+  async fetchFilesByKey(key: keyof FileDTO, value: unknown): Promise<FileDTO[]> {
+    const rows = this.#db
+      .prepare(`SELECT * FROM files WHERE "${String(key)}" = ?`)
+      .all(value as any) as any[];
+    return rows.map((r) => this.#rowToFile(r));
+  }
+
+  async searchFiles(
+    criteria: ConditionDTO<FileDTO> | [ConditionDTO<FileDTO>, ...ConditionDTO<FileDTO>[]],
+    order: OrderBy<FileDTO>,
+    fileOrder: OrderDirection,
+    matchAny?: boolean,
+  ): Promise<FileDTO[]> {
+    const criterias = Array.isArray(criteria) ? criteria : ([criteria] as [ConditionDTO<FileDTO>]);
+    const lambdas = criterias.map((crit) => filterLambda(crit));
+    const conjunction = matchAny ? 'some' : 'every';
+    const allFiles = await this.fetchFiles('id', OrderDirection.Asc);
+    const matched = allFiles.filter((file) => lambdas[conjunction]((lambda) => lambda(file)));
+    return this.#sortAndOrder(matched, order, fileOrder);
+  }
+
+  async saveFiles(files: FileDTO[]): Promise<void> {
+    const run = this.#db.transaction((items: FileDTO[]) => {
+      const upsert = this.#db.prepare(`
+        INSERT INTO files (id, ino, locationId, relativePath, absolutePath, name, extension, size, width, height,
+                            dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng)
+        VALUES (@id, @ino, @locationId, @relativePath, @absolutePath, @name, @extension, @size, @width, @height,
+                @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng)
+        ON CONFLICT(id) DO UPDATE SET
+          ino=excluded.ino, locationId=excluded.locationId, relativePath=excluded.relativePath,
+          absolutePath=excluded.absolutePath, name=excluded.name, extension=excluded.extension,
+          size=excluded.size, width=excluded.width, height=excluded.height, dateAdded=excluded.dateAdded,
+          dateModified=excluded.dateModified, dateCreated=excluded.dateCreated,
+          dateLastIndexed=excluded.dateLastIndexed, annotations=excluded.annotations,
+          lat=excluded.lat, lng=excluded.lng
+      `);
+      for (const file of items) {
+        upsert.run({
+          ...file,
+          dateAdded: file.dateAdded.toISOString(),
+          dateModified: file.dateModified.toISOString(),
+          dateCreated: file.dateCreated.toISOString(),
+          dateLastIndexed: file.dateLastIndexed.toISOString(),
+          lat: file.lat ?? null,
+          lng: file.lng ?? null,
+        });
+        this.#writeFileTags(file.id, file.tags);
+      }
+    });
+    run(files);
+    this.#notifyChange();
+  }
+
+  async createFilesFromPath(path: string, files: FileDTO[]): Promise<void> {
+    const run = this.#db.transaction((prefix: string, items: FileDTO[]) => {
+      const existing = new Set(
+        (
+          this.#db
+            .prepare(`SELECT absolutePath FROM files WHERE absolutePath LIKE ? || '%'`)
+            .all(prefix) as { absolutePath: string }[]
+        ).map((r) => r.absolutePath),
+      );
+      const toInsert = items.filter((f) => !existing.has(f.absolutePath));
+      const insert = this.#db.prepare(`
+        INSERT INTO files (id, ino, locationId, relativePath, absolutePath, name, extension, size, width, height,
+                            dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng)
+        VALUES (@id, @ino, @locationId, @relativePath, @absolutePath, @name, @extension, @size, @width, @height,
+                @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng)
+      `);
+      for (const file of toInsert) {
+        insert.run({
+          ...file,
+          dateAdded: file.dateAdded.toISOString(),
+          dateModified: file.dateModified.toISOString(),
+          dateCreated: file.dateCreated.toISOString(),
+          dateLastIndexed: file.dateLastIndexed.toISOString(),
+          lat: file.lat ?? null,
+          lng: file.lng ?? null,
+        });
+        this.#writeFileTags(file.id, file.tags);
+      }
+    });
+    run(path, files);
+    this.#notifyChange();
+  }
+
+  async removeFiles(files: ID[]): Promise<void> {
+    if (files.length === 0) {
+      return;
+    }
+    const placeholders = files.map(() => '?').join(',');
+    this.#db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).run(...files);
     this.#notifyChange();
   }
 }
