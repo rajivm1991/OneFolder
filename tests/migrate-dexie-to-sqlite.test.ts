@@ -1,6 +1,7 @@
 import fse from 'fs-extra';
 import os from 'os';
 import path from 'path';
+import { ROOT_TAG_ID } from '../src/api/tag';
 import { dbInit } from '../src/backend/config';
 import Backend from '../src/backend/backend';
 import { SqliteBackend } from '../src/backend/sqlite-backend';
@@ -71,6 +72,30 @@ describe('migrateDexieToSqlite', () => {
     const files = await sqlite.fetchFiles('id' as any, 0);
     expect(files).toHaveLength(1);
     expect(files[0].tags).toEqual(['tag1']);
+  });
+
+  it("carries the legacy root tag's subTags across, so the migrated tag tree is not empty", async () => {
+    const dexieDbName = `MigrateTest_${counter++}`;
+    const db = dbInit(dexieDbName);
+    const legacy = await Backend.init(db, () => {});
+    await legacy.createTag({
+      id: 'tag1',
+      name: 'Favorite',
+      dateAdded: new Date(),
+      color: '',
+      subTags: [],
+      isHidden: false,
+    });
+    const legacyRoot = (await legacy.fetchTags()).find((t) => t.id === ROOT_TAG_ID);
+    expect(legacyRoot).toBeDefined();
+    await legacy.saveTag({ ...legacyRoot!, subTags: ['tag1'] });
+
+    const targetPath = path.join(tmpDir, 'default.onefolder');
+    await migrateDexieToSqlite(dexieDbName, targetPath);
+
+    const sqlite = await SqliteBackend.init(targetPath, () => {});
+    const root = (await sqlite.fetchTags()).find((t) => t.id === ROOT_TAG_ID);
+    expect(root?.subTags).toEqual(['tag1']);
   });
 
   it('is a no-op if the target context file already exists', async () => {

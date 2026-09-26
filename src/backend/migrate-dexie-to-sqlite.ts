@@ -36,11 +36,9 @@ export async function migrateDexieToSqlite(
   const target = await SqliteBackend.init(targetContextPath, () => {});
 
   for (const tag of tags) {
-    // Backend.init already seeded a root tag into the fresh SQLite file, so skip it here.
-    if (tag.id === 'root') {
-      continue;
-    }
-    await target.createTag(tag);
+    // Upsert rather than insert: SqliteBackend.init already seeded an empty root tag, and the
+    // legacy root carries the real subTags list that the whole tag tree hangs off of.
+    await target.saveTag(tag);
   }
   for (const location of locations) {
     await target.createLocation(location);
