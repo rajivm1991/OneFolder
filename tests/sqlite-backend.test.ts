@@ -1,0 +1,442 @@
+import Database from 'better-sqlite3';
+import fse from 'fs-extra';
+import os from 'os';
+import path from 'path';
+import { ROOT_TAG_ID, TagDTO } from '../src/api/tag';
+import { LocationDTO } from '../src/api/location';
+import { FileSearchDTO } from '../src/api/file-search';
+import { SqliteBackend } from '../src/backend/sqlite-backend';
+import { OrderDirection } from '../src/api/data-storage-search';
+import { FileDTO } from '../src/api/file';
+import { DismissedDuplicateGroupDTO } from '../src/api/dismissed-duplicate-group';
+import { VisualHashDTO } from '../src/api/visual-hash';
+
+describe('SqliteBackend', () => {
+  let tmpDir: string;
+  let counter = 0;
+
+  beforeEach(async () => {
+    tmpDir = await fse.mkdtemp(path.join(os.tmpdir(), 'onefolder-sqlite-'));
+  });
+
+  afterEach(async () => {
+    await fse.remove(tmpDir);
+  });
+
+  async function initBackend(): Promise<SqliteBackend> {
+    const contextPath = path.join(tmpDir, `context-${counter++}.onefolder`);
+    return SqliteBackend.init(contextPath, () => {});
+  }
+
+  async function initBackendWithPath(): Promise<{ backend: SqliteBackend; contextPath: string }> {
+    const contextPath = path.join(tmpDir, `context-${counter++}.onefolder`);
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    return { backend, contextPath };
+  }
+
+  const mockTag: TagDTO = {
+    id: 'tag1',
+    name: 'tag1 name',
+    dateAdded: new Date(),
+    color: '',
+    subTags: [],
+    isHidden: false,
+  };
+
+  it('seeds a root tag on first init', async () => {
+    const backend = await initBackend();
+    const tags = await backend.fetchTags();
+    expect(tags).toHaveLength(1);
+    expect(tags[0].id).toBe(ROOT_TAG_ID);
+  });
+
+  it('does not duplicate the root tag when re-initialized against the same file', async () => {
+    const contextPath = path.join(tmpDir, 'reinit.onefolder');
+    await SqliteBackend.init(contextPath, () => {});
+    const backend2 = await SqliteBackend.init(contextPath, () => {});
+    const tags = await backend2.fetchTags();
+    expect(tags).toHaveLength(1);
+  });
+
+  it('creates and fetches a tag', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    const tags = await backend.fetchTags();
+    expect(tags.map((t: TagDTO) => t.id).sort()).toEqual([ROOT_TAG_ID, 'tag1'].sort());
+  });
+
+  it('saveTag updates an existing tag in place', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    await backend.saveTag({ ...mockTag, name: 'renamed' });
+    const tags = await backend.fetchTags();
+    expect(tags.find((t: TagDTO) => t.id === 'tag1')?.name).toBe('renamed');
+  });
+
+  it('creates, fetches, saves and removes a location', async () => {
+    const backend = await initBackend();
+    const location: LocationDTO = {
+      id: 'loc1',
+      path: '/drives/school',
+      dateAdded: new Date(),
+      subLocations: [],
+      index: 0,
+    };
+    await backend.createLocation(location);
+    expect(await backend.fetchLocations()).toHaveLength(1);
+    await backend.saveLocation({ ...location, path: '/drives/school-renamed' });
+    expect((await backend.fetchLocations())[0].path).toBe('/drives/school-renamed');
+    await backend.removeLocation('loc1');
+    expect(await backend.fetchLocations()).toHaveLength(0);
+  });
+
+  it('creates, fetches, saves and removes a search', async () => {
+    const backend = await initBackend();
+    const search: FileSearchDTO = { id: 's1', name: 'Favorites', criteria: [], index: 0 };
+    await backend.createSearch(search);
+    expect(await backend.fetchSearches()).toHaveLength(1);
+    await backend.saveSearch({ ...search, name: 'Renamed' });
+    expect((await backend.fetchSearches())[0].name).toBe('Renamed');
+    await backend.removeSearch('s1');
+    expect(await backend.fetchSearches()).toHaveLength(0);
+  });
+
+  it('two contexts have fully isolated tag sets', async () => {
+    const backendA = await initBackend();
+    const backendB = await initBackend();
+    await backendA.createTag(mockTag);
+    expect(await backendA.fetchTags()).toHaveLength(2); // root + mockTag
+    expect(await backendB.fetchTags()).toHaveLength(1); // root only
+  });
+
+  it('rejects opening a non-empty file that is not a OneFolder context', async () => {
+    const foreignPath = path.join(tmpDir, 'not-a-context.onefolder');
+    const foreignDb = new (require('better-sqlite3'))(foreignPath);
+    foreignDb.exec('CREATE TABLE unrelated_stuff (id TEXT)');
+    foreignDb.close();
+
+    await expect(SqliteBackend.init(foreignPath, () => {})).rejects.toThrow(
+      /not a OneFolder context file/,
+    );
+  });
+
+  function createMockFile(overrides: Partial<FileDTO> = {}): FileDTO {
+    return {
+      id: overrides.id ?? 'file1',
+      ino: '1',
+      locationId: 'loc1',
+      relativePath: 'a.jpg',
+      absolutePath: overrides.absolutePath ?? '/drives/school/a.jpg',
+      name: 'a.jpg',
+      extension: 'jpg',
+      size: 42,
+      width: 640,
+      height: 480,
+      dateAdded: new Date(),
+      dateModified: new Date(),
+      dateCreated: new Date(),
+      dateLastIndexed: new Date(),
+      annotations: '',
+      lat: undefined,
+      lng: undefined,
+      tags: [],
+      ...overrides,
+    };
+  }
+
+  it('createFilesFromPath then fetchFiles round-trips a file, including tags', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    const file = createMockFile({ tags: ['tag1'] });
+    await backend.createFilesFromPath('/drives/school', [file]);
+    const files = await backend.fetchFiles('id', OrderDirection.Asc);
+    expect(files).toHaveLength(1);
+    expect(files[0].absolutePath).toBe(file.absolutePath);
+    expect(files[0].tags).toEqual(['tag1']);
+  });
+
+  it('createFilesFromPath skips files whose absolutePath already exists under that path', async () => {
+    const backend = await initBackend();
+    const file = createMockFile();
+    await backend.createFilesFromPath('/drives/school', [file]);
+    await backend.createFilesFromPath('/drives/school', [file]);
+    expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(1);
+  });
+
+  it('fetchFilesByID returns only existing ids, in no particular guaranteed order', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/f2.jpg' }),
+    ]);
+    const files = await backend.fetchFilesByID(['f1', 'missing', 'f2']);
+    expect(files.map((f) => f.id).sort()).toEqual(['f1', 'f2']);
+  });
+
+  it('fetchFilesByKey filters by an exact field match', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg', locationId: 'locA' }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/f2.jpg', locationId: 'locB' }),
+    ]);
+    const files = await backend.fetchFilesByKey('locationId', 'locA');
+    expect(files.map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('searchFiles supports a string "contains" condition (AND semantics)', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/holiday.jpg', name: 'holiday.jpg' }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/exam.jpg', name: 'exam.jpg' }),
+    ]);
+    const results = await backend.searchFiles(
+      { key: 'name', operator: 'contains', value: 'holiday', valueType: 'string' },
+      'id',
+      OrderDirection.Asc,
+    );
+    expect(results.map((f) => f.id)).toEqual(['f1']);
+  });
+
+  it('searchFiles supports an array "contains" condition for tags, with OR semantics across two conditions', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    await backend.createTag({ ...mockTag, id: 'tag2' });
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg', tags: ['tag1'] }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/f2.jpg', tags: ['tag2'] }),
+      createMockFile({ id: 'f3', absolutePath: '/drives/school/f3.jpg', tags: [] }),
+    ]);
+    const results = await backend.searchFiles(
+      [
+        { key: 'tags', operator: 'contains', value: ['tag1'], valueType: 'array' },
+        { key: 'tags', operator: 'contains', value: ['tag2'], valueType: 'array' },
+      ],
+      'id',
+      OrderDirection.Asc,
+      true,
+    );
+    expect(results.map((f) => f.id).sort()).toEqual(['f1', 'f2']);
+  });
+
+  it('removeFiles deletes the given files', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+    ]);
+    await backend.removeFiles(['f1']);
+    expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(0);
+  });
+
+  it('saveFiles persists lat/lng fields', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+    ]);
+    const [file] = await backend.fetchFilesByID(['f1']);
+    await backend.saveFiles([{ ...file, lat: 48.8566, lng: 2.3522 }]);
+    const [saved] = await backend.fetchFilesByID(['f1']);
+    expect(saved.lat).toBe(48.8566);
+    expect(saved.lng).toBe(2.3522);
+  });
+
+  it('preserves the three GPS states (not checked / checked-none / coordinate) across a round-trip', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'unchecked', absolutePath: '/drives/school/u.jpg' }),
+    ]);
+    await backend.saveFiles([
+      createMockFile({ id: 'none', absolutePath: '/drives/school/n.jpg', lat: null, lng: 5 }),
+      createMockFile({ id: 'real', absolutePath: '/drives/school/r.jpg', lat: 12.5, lng: -3.25 }),
+      createMockFile({ id: 'unchecked2', absolutePath: '/drives/school/u2.jpg' }),
+    ]);
+    const byId = new Map(
+      (await backend.fetchFiles('id', OrderDirection.Asc)).map((f) => [f.id, f] as const),
+    );
+    expect(byId.get('unchecked')!.lat).toBeUndefined();
+    expect(byId.get('unchecked')!.lng).toBeUndefined();
+    expect(byId.get('unchecked2')!.lat).toBeUndefined();
+    expect(byId.get('unchecked2')!.lng).toBeUndefined();
+    expect(byId.get('none')!.lat).toBeNull();
+    expect(byId.get('none')!.lng).toBe(5);
+    expect(byId.get('real')!.lat).toBe(12.5);
+    expect(byId.get('real')!.lng).toBe(-3.25);
+  });
+
+  it('adds the GPS checked columns to a context file created before they existed', async () => {
+    const contextPath = path.join(tmpDir, 'old-format.onefolder');
+    const old = new Database(contextPath);
+    old.exec(`
+      CREATE TABLE tags (id TEXT PRIMARY KEY, name TEXT NOT NULL, dateAdded TEXT NOT NULL,
+        color TEXT NOT NULL, isHidden INTEGER NOT NULL);
+      CREATE TABLE files (id TEXT PRIMARY KEY, ino TEXT NOT NULL, locationId TEXT NOT NULL,
+        relativePath TEXT NOT NULL, absolutePath TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+        extension TEXT NOT NULL, size INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL,
+        dateAdded TEXT NOT NULL, dateModified TEXT NOT NULL, dateCreated TEXT NOT NULL,
+        dateLastIndexed TEXT NOT NULL, annotations TEXT NOT NULL, lat REAL, lng REAL);
+    `);
+    const now = new Date().toISOString();
+    const insert = old.prepare(
+      `INSERT INTO files VALUES (?, '1', 'loc1', ?, ?, 'a.jpg', 'jpg', 1, 1, 1, ?, ?, ?, ?, '', ?, ?)`,
+    );
+    insert.run('legacyNull', 'a.jpg', '/d/a.jpg', now, now, now, now, null, null);
+    insert.run('legacyReal', 'b.jpg', '/d/b.jpg', now, now, now, now, 1.5, 2.5);
+    old.close();
+
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    const byId = new Map(
+      (await backend.fetchFiles('id', OrderDirection.Asc)).map((f) => [f.id, f] as const),
+    );
+    // A legacy row with no checked flag and no coordinate is re-queued for GPS backfill.
+    expect(byId.get('legacyNull')!.lat).toBeUndefined();
+    expect(byId.get('legacyNull')!.lng).toBeUndefined();
+    expect(byId.get('legacyReal')!.lat).toBe(1.5);
+    expect(byId.get('legacyReal')!.lng).toBe(2.5);
+
+    await backend.saveFiles([
+      createMockFile({ id: 'new', absolutePath: '/d/c.jpg', lat: null, lng: null }),
+    ]);
+    const [saved] = await backend.fetchFilesByID(['new']);
+    expect(saved.lat).toBeNull();
+  });
+
+  it('createFilesFromPath escapes LIKE metacharacters in the path when detecting duplicates', async () => {
+    const backend = await initBackend();
+    const file = createMockFile({
+      id: 'f1',
+      absolutePath: '/drives/100%folder/f1.jpg',
+    });
+    await backend.createFilesFromPath('/drives/100%folder', [file]);
+    await backend.createFilesFromPath('/drives/100%folder', [file]);
+    expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(1);
+  });
+
+  it('createFilesFromPath does not over-match unrelated paths due to unescaped % wildcard', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/100Xfolder', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/100Xfolder/f1.jpg' }),
+    ]);
+    await backend.createFilesFromPath('/drives/100%folder', [
+      createMockFile({ id: 'f2', absolutePath: '/drives/100%folder/f2.jpg' }),
+    ]);
+    const files = await backend.fetchFiles('id', OrderDirection.Asc);
+    expect(files.map((f) => f.id).sort()).toEqual(['f1', 'f2']);
+  });
+
+  it('creates, fetches and removes a dismissed duplicate group', async () => {
+    const backend = await initBackend();
+    const group: DismissedDuplicateGroupDTO = {
+      id: 'g1',
+      groupHash: 'hash1',
+      algorithm: 'aHash',
+      fileIds: JSON.stringify(['f1', 'f2']),
+      dismissedAt: new Date(),
+    };
+    await backend.createDismissedDuplicateGroup(group);
+    expect(await backend.fetchDismissedDuplicateGroups()).toHaveLength(1);
+    await backend.removeDismissedDuplicateGroup('hash1');
+    expect(await backend.fetchDismissedDuplicateGroups()).toHaveLength(0);
+  });
+
+  it('replaces an existing dismissed duplicate group with the same groupHash', async () => {
+    const backend = await initBackend();
+    const group: DismissedDuplicateGroupDTO = {
+      id: 'g1',
+      groupHash: 'hash1',
+      algorithm: 'aHash',
+      fileIds: JSON.stringify(['f1']),
+      dismissedAt: new Date(),
+    };
+    await backend.createDismissedDuplicateGroup(group);
+    await backend.createDismissedDuplicateGroup({ ...group, id: 'g2', algorithm: 'dctHash' });
+    const groups = await backend.fetchDismissedDuplicateGroups();
+    expect(groups).toHaveLength(1);
+    expect(groups[0].algorithm).toBe('dctHash');
+  });
+
+  it('saves, fetches and removes visual hashes', async () => {
+    const backend = await initBackend();
+    const hash: VisualHashDTO = {
+      absolutePath: '/drives/school/a.jpg',
+      fileSize: 100,
+      dateModified: new Date(),
+      hashType: 'aHash',
+      hash: 'abc123',
+      dateComputed: new Date(),
+    };
+    await backend.saveVisualHashes([hash]);
+    expect(await backend.fetchVisualHashes(['/drives/school/a.jpg'])).toHaveLength(1);
+    await backend.removeVisualHashes(['/drives/school/a.jpg']);
+    expect(await backend.fetchVisualHashes(['/drives/school/a.jpg'])).toHaveLength(0);
+  });
+
+  it('clearVisualHashCache empties the visual hash table only', async () => {
+    const backend = await initBackend();
+    await backend.saveVisualHashes([
+      {
+        absolutePath: '/a.jpg',
+        fileSize: 1,
+        dateModified: new Date(),
+        hashType: 'aHash',
+        hash: 'x',
+        dateComputed: new Date(),
+      },
+    ]);
+    await backend.createTag(mockTag);
+    await backend.clearVisualHashCache();
+    expect(await backend.fetchVisualHashes(['/a.jpg'])).toHaveLength(0);
+    expect(await backend.fetchTags()).toHaveLength(2);
+  });
+
+  it('countFiles reports total and untagged counts', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg', tags: ['tag1'] }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/f2.jpg', tags: [] }),
+    ]);
+    const [total, untagged] = await backend.countFiles();
+    expect(total).toBe(2);
+    expect(untagged).toBe(1);
+  });
+
+  it('clearFilesOnly removes files, visual hashes and dismissed groups but keeps tags/locations', async () => {
+    const backend = await initBackend();
+    await backend.createTag(mockTag);
+    await backend.createLocation({
+      id: 'loc1',
+      path: '/drives/school',
+      dateAdded: new Date(),
+      subLocations: [],
+      index: 0,
+    });
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+    ]);
+    await backend.clearFilesOnly();
+    expect(await backend.fetchFiles('id', OrderDirection.Asc)).toHaveLength(0);
+    expect(await backend.fetchTags()).toHaveLength(2);
+    expect(await backend.fetchLocations()).toHaveLength(1);
+  });
+
+  it('clear() wipes all data on disk, so reopening the same context file is a fresh library', async () => {
+    const { backend, contextPath } = await initBackendWithPath();
+    await backend.createTag(mockTag);
+    await backend.createLocation({
+      id: 'loc1',
+      path: '/drives/school',
+      dateAdded: new Date(),
+      subLocations: [],
+      index: 0,
+    });
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg' }),
+    ]);
+    await backend.clear();
+
+    const reopened = await SqliteBackend.init(contextPath, () => {});
+    expect(await reopened.fetchTags()).toHaveLength(1);
+    expect((await reopened.fetchTags())[0].id).toBe(ROOT_TAG_ID);
+    expect(await reopened.fetchLocations()).toHaveLength(0);
+    expect(await reopened.fetchFiles('id', OrderDirection.Asc)).toHaveLength(0);
+  });
+});

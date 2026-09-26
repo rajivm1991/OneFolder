@@ -426,7 +426,7 @@ function filterWhere<T>(
   }
 }
 
-function filterLambda<T>(crit: ConditionDTO<T>): (val: T) => boolean {
+export function filterLambda<T>(crit: ConditionDTO<T>): (val: T) => boolean {
   switch (crit.valueType) {
     case 'array':
       return filterArrayLambda(crit);

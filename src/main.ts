@@ -20,6 +20,11 @@ import { createBugReport, githubUrl } from '../common/config';
 import { IS_DEV } from '../common/process';
 import { MainMessenger } from './ipc/main';
 import { WindowSystemButtonPress } from './ipc/messages';
+import {
+  createContextPlaceholder,
+  readContextSettings,
+  recordOpenedContext,
+} from './backend/context-settings';
 
 // TODO: change this when running in portable mode, see portable-improvements branch
 const basePath = app.getPath('userData');
@@ -209,6 +214,63 @@ function createWindow() {
         label: 'Quit',
         accelerator: 'Command+Q',
         click: () => app.quit(),
+      },
+    ],
+  });
+
+  function switchToContext(contextPath: string): void {
+    recordOpenedContext(app.getPath('userData'), contextPath);
+    forceRelaunch();
+  }
+
+  const contextSettings = readContextSettings(app.getPath('userData'));
+
+  menuBar.push({
+    label: 'File',
+    submenu: [
+      {
+        label: 'New Context…',
+        click: () => {
+          const chosen = dialog.showSaveDialogSync({
+            title: 'New Context',
+            defaultPath: 'untitled.onefolder',
+            filters: [{ name: 'OneFolder Context', extensions: ['onefolder'] }],
+          });
+          if (chosen) {
+            // The file must exist before relaunching, or startup treats the context as being on
+            // an unplugged drive and falls back to the default context.
+            try {
+              createContextPlaceholder(chosen);
+            } catch (e) {
+              dialog.showErrorBox('Could not create context', `${chosen}\n\n${e}`);
+              return;
+            }
+            switchToContext(chosen);
+          }
+        },
+      },
+      {
+        label: 'Open Context…',
+        click: () => {
+          const chosen = dialog.showOpenDialogSync({
+            title: 'Open Context',
+            properties: ['openFile'],
+            filters: [{ name: 'OneFolder Context', extensions: ['onefolder'] }],
+          });
+          if (chosen && chosen[0]) {
+            switchToContext(chosen[0]);
+          }
+        },
+      },
+      {
+        label: 'Recent Contexts',
+        submenu:
+          contextSettings.recentContexts.length > 0
+            ? contextSettings.recentContexts.map((contextPath) => ({
+                label: contextPath,
+                click: () => switchToContext(contextPath),
+              }))
+            : [{ label: 'No recent contexts', enabled: false }],
       },
     ],
   });

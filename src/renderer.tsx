@@ -6,8 +6,8 @@
 // in the HTML file
 import './style.scss';
 
-import Dexie from 'dexie';
 import fse from 'fs-extra';
+import path from 'path';
 import { autorun, reaction, runInAction } from 'mobx';
 import React from 'react';
 import { Root, createRoot } from 'react-dom/client';
@@ -15,7 +15,6 @@ import { Root, createRoot } from 'react-dom/client';
 import { IS_DEV } from 'common/process';
 import { IS_PREVIEW_WINDOW, WINDOW_STORAGE_KEY } from 'common/window';
 import { RendererMessenger } from 'src/ipc/renderer';
-import Backend from './backend/backend';
 import App from './frontend/App';
 import SplashScreen from './frontend/containers/SplashScreen';
 import StoreProvider from './frontend/contexts/StoreContext';
@@ -24,8 +23,62 @@ import PreviewApp from './frontend/Preview';
 import { FILE_STORAGE_KEY } from './frontend/stores/FileStore';
 import RootStore from './frontend/stores/RootStore';
 import { PREFERENCES_STORAGE_KEY } from './frontend/stores/UiStore';
-import BackupScheduler from './backend/backup-scheduler';
-import { DB_NAME, dbInit } from './backend/config';
+import { SqliteBackend } from './backend/sqlite-backend';
+import { SqliteBackupScheduler } from './backend/sqlite-backup-scheduler';
+import { migrateDexieToSqlite } from './backend/migrate-dexie-to-sqlite';
+import { readContextSettings } from './backend/context-settings';
+import { openAndRecordContext } from './backend/open-context';
+import { DB_NAME } from './backend/config';
+
+/** Main window only: picks the context to open, migrating the legacy library on first run. */
+async function resolveMainContextPath(userDataPath: string): Promise<string> {
+  const settings = readContextSettings(userDataPath);
+
+  if (settings.lastOpenedContextPath && (await fse.pathExists(settings.lastOpenedContextPath))) {
+    return settings.lastOpenedContextPath;
+  }
+
+  // First run, or the last context file is missing (e.g. its drive is unplugged):
+  // migrate the legacy Dexie library (if any) into a default context and open that.
+  const defaultContextPath = path.join(userDataPath, 'default.onefolder');
+  await migrateDexieToSqlite(DB_NAME, defaultContextPath);
+  return defaultContextPath;
+}
+
+// Generous, since the window waiting on it is hidden: on first launch the main window may be
+// migrating a large legacy library before it records the context.
+const PREVIEW_CONTEXT_WAIT_MS = 60_000;
+const PREVIEW_CONTEXT_POLL_MS = 250;
+
+/**
+ * Preview window only: never migrates or creates a context (that raced the main window on first
+ * launch and corrupted the migration). Instead waits for the context that the main window records
+ * once it has opened it successfully, which on a normal launch is already there.
+ */
+async function waitForMainContextPath(userDataPath: string): Promise<string> {
+  const deadline = Date.now() + PREVIEW_CONTEXT_WAIT_MS;
+  for (;;) {
+    const { lastOpenedContextPath } = readContextSettings(userDataPath);
+    if (lastOpenedContextPath && (await fse.pathExists(lastOpenedContextPath))) {
+      // A brand-new context (from "New Context…") starts as a 0-byte file until the main
+      // window finishes initializing its schema. Treating an empty file as ready here would
+      // let this window race the main window's PRAGMA/schema-init calls on the same file.
+      const stats = await fse.stat(lastOpenedContextPath);
+      if (stats.size > 0) {
+        return lastOpenedContextPath;
+      }
+    }
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `Preview window: no context file was opened by the main window within ${PREVIEW_CONTEXT_WAIT_MS} ms` +
+          (lastOpenedContextPath
+            ? ` (last opened context "${lastOpenedContextPath}" is missing)`
+            : ''),
+      );
+    }
+    await new Promise((resolve) => setTimeout(resolve, PREVIEW_CONTEXT_POLL_MS));
+  }
+}
 
 async function main(): Promise<void> {
   console.groupCollapsed('Initializing OneFolder');
@@ -40,23 +93,24 @@ async function main(): Promise<void> {
 
   root.render(<SplashScreen />);
 
-  const db = dbInit(DB_NAME);
+  const userDataPath = await RendererMessenger.getPath('userData');
 
   if (!IS_PREVIEW_WINDOW) {
-    await runMainApp(db, root);
+    await runMainApp(await resolveMainContextPath(userDataPath), userDataPath, root);
   } else {
-    await runPreviewApp(db, root);
+    await runPreviewApp(await waitForMainContextPath(userDataPath), root);
   }
   console.groupEnd();
 }
 
-async function runMainApp(db: Dexie, root: Root): Promise<void> {
-  const defaultBackupDirectory = await RendererMessenger.getDefaultBackupDirectory();
-  const backup = new BackupScheduler(db, defaultBackupDirectory);
-  const [backend] = await Promise.all([
-    Backend.init(db, () => backup.schedule()),
-    fse.ensureDir(defaultBackupDirectory),
-  ]);
+async function runMainApp(contextPath: string, userDataPath: string, root: Root): Promise<void> {
+  // The scheduler backs up through the backend's live connection, so the backend comes first.
+  // Nothing calls notifyChange during init, so `backup` is always set by the time it's needed.
+  // The context is only recorded as last opened once it has opened successfully.
+  let backup: SqliteBackupScheduler | undefined;
+  const backend = await openAndRecordContext(userDataPath, contextPath, () => backup?.schedule());
+  backup = new SqliteBackupScheduler(backend, await RendererMessenger.getDefaultBackupDirectory());
+  await fse.ensureDir(backup.backupDirectory);
 
   const rootStore = await RootStore.main(backend, backup);
 
@@ -223,9 +277,15 @@ async function runMainApp(db: Dexie, root: Root): Promise<void> {
   }
 }
 
-async function runPreviewApp(db: Dexie, root: Root): Promise<void> {
-  const backend = new Backend(db, () => {});
-  const rootStore = await RootStore.preview(backend, new BackupScheduler(db, ''));
+async function runPreviewApp(contextPath: string, root: Root): Promise<void> {
+  const backend = await SqliteBackend.init(contextPath, () => {});
+  // The preview window never schedules backups, but point it at the same per-context directory
+  // as the main window for consistency.
+  const backup = new SqliteBackupScheduler(
+    backend,
+    await RendererMessenger.getDefaultBackupDirectory(),
+  );
+  const rootStore = await RootStore.preview(backend, backup);
 
   RendererMessenger.initialized();
 
