@@ -1,7 +1,9 @@
+import Database from 'better-sqlite3';
 import fse from 'fs-extra';
 import path from 'path';
 
 import { debounce } from '../../common/timeout';
+import { DataBackup } from '../api/data-backup';
 import { AUTO_BACKUP_TIMEOUT, NUM_AUTO_BACKUPS } from './config';
 
 function getToday(): Date {
@@ -17,7 +19,7 @@ function getWeekStart(): Date {
 }
 
 /** Periodically copies a SQLite context file into a backup directory, with daily/weekly rotation. */
-export class SqliteBackupScheduler {
+export class SqliteBackupScheduler implements DataBackup {
   #contextPath: string;
   #backupDirectory: string;
   #lastBackupIndex = 0;
@@ -37,6 +39,23 @@ export class SqliteBackupScheduler {
   async backupToFile(targetPath: string): Promise<void> {
     await fse.ensureDir(path.dirname(targetPath));
     await fse.copyFile(this.#contextPath, targetPath);
+  }
+
+  async restoreFromFile(targetPath: string): Promise<void> {
+    console.info('SQLite: Importing context backup...', targetPath);
+    await fse.copyFile(targetPath, this.#contextPath);
+  }
+
+  async peekFile(targetPath: string): Promise<[numTags: number, numFiles: number]> {
+    console.info('SQLite: Peeking context backup...', targetPath);
+    const db = new Database(targetPath, { readonly: true });
+    try {
+      const numTags = (db.prepare('SELECT COUNT(*) as c FROM tags').get() as { c: number }).c;
+      const numFiles = (db.prepare('SELECT COUNT(*) as c FROM files').get() as { c: number }).c;
+      return [numTags, numFiles];
+    } finally {
+      db.close();
+    }
   }
 
   static async #copyIfOlderThan(srcPath: string, targetPath: string, cutoff: Date): Promise<void> {
