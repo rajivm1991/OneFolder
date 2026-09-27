@@ -205,6 +205,31 @@ describe('SqliteBackend people / face clustering API', () => {
     expect(people[0].name).toBe('Mom');
   });
 
+  test('clearFilesOnly deletes people along with the files and faces (Dexie parity)', async (backend) => {
+    await backend.createFilesFromPath('/root', [mockFile({ id: 'file-1' })]);
+    await backend.saveFaceDetectionResult(mockStatus(), [mockFace()], [mockPerson()]);
+    expect(await backend.fetchAllPeople()).toHaveLength(1);
+
+    await backend.clearFilesOnly();
+    expect(await backend.fetchAllPeople()).toHaveLength(0);
+    expect(await backend.fetchFacesForFile('file-1')).toHaveLength(0);
+  });
+
+  it('clear deletes people too (Dexie parity: its clear deletes the whole database)', async () => {
+    // clear() closes the connection, so reopen the same context file to inspect it.
+    const contextPath = path.join(tmpDir, `context-${counter++}.onefolder`);
+    const backend = await SqliteBackend.init(contextPath, () => {});
+    await backend.createFilesFromPath('/root', [mockFile({ id: 'file-1' })]);
+    await backend.saveFaceDetectionResult(mockStatus(), [mockFace()], [mockPerson()]);
+    expect(await backend.fetchAllPeople()).toHaveLength(1);
+
+    await backend.clear();
+    const reopened = await SqliteBackend.init(contextPath, () => {});
+    expect(await reopened.fetchAllPeople()).toHaveLength(0);
+    expect(await reopened.fetchFacesForFile('file-1')).toHaveLength(0);
+    reopened.close();
+  });
+
   /** End-to-end with the REAL store + REAL SQLite backend: the store's in-memory people cache is
    * never refreshed, so it can reference people the backend has pruned (or never saved). */
   const box = { x: 0.1, y: 0.1, width: 0.2, height: 0.2 };

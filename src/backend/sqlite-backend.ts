@@ -671,7 +671,10 @@ export class SqliteBackend implements DataStorage {
 
   async clearFilesOnly(): Promise<void> {
     const run = this.#db.transaction(() => {
+      // faces + face_detection_status go with the files (ON DELETE CASCADE); people have no FK to
+      // anything, so they're cleared explicitly — same as the Dexie backend's clearFilesOnly.
       this.#db.prepare('DELETE FROM files').run();
+      this.#db.prepare('DELETE FROM people').run();
       this.#db.prepare('DELETE FROM visual_hashes').run();
       this.#db.prepare('DELETE FROM dismissed_duplicate_groups').run();
     });
@@ -682,7 +685,8 @@ export class SqliteBackend implements DataStorage {
   async clear(): Promise<void> {
     const run = this.#db.transaction(() => {
       this.#db.prepare('DELETE FROM file_tags').run();
-      this.#db.prepare('DELETE FROM files').run();
+      this.#db.prepare('DELETE FROM files').run(); // faces + face_detection_status cascade
+      this.#db.prepare('DELETE FROM people').run();
       this.#db.prepare('DELETE FROM tag_subtags').run();
       this.#db.prepare('DELETE FROM tags').run();
       this.#db.prepare('DELETE FROM locations').run();
