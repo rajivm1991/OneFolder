@@ -151,12 +151,14 @@ export default class ZoomPan extends React.Component<ZoomPanProps, ZoomPanState>
   };
 
   handleMouseWheel = (event: React.WheelEvent) => {
-    // Only zoom on pinch gestures (trackpad pinch-to-zoom sends wheel events with ctrlKey=true)
-    // or an explicit ctrl/cmd+scroll. Plain two-finger scrolling should not zoom.
+    this.stopAnimation();
+    // Trackpad pinch-to-zoom sends wheel events with ctrlKey=true; only zoom for that
+    // (or an explicit ctrl/cmd+scroll). Plain two-finger swiping should scroll/pan instead.
     if (!event.ctrlKey) {
+      this.panByDelta(event.deltaX, event.deltaY);
+      tryPreventDefault(event);
       return;
     }
-    this.stopAnimation();
     const { scale } = this.state;
     const point = getRelativePosition(createVec2(event.clientX, event.clientY), this.container);
     if (event.deltaY > 0) {
@@ -187,6 +189,19 @@ export default class ZoomPan extends React.Component<ZoomPanProps, ZoomPanState>
     this.setState((state, props) => {
       const top = state.top + translateY;
       const left = state.left + translateX;
+      const transform = createTransform(top, left, state.scale);
+      if (props.transitionEnd !== undefined) {
+        return transform;
+      } else {
+        return getCorrectedTransform(props, transform, 0) ?? transform;
+      }
+    });
+  }
+
+  panByDelta(deltaX: number, deltaY: number): void {
+    this.setState((state, props) => {
+      const top = state.top - deltaY;
+      const left = state.left - deltaX;
       const transform = createTransform(top, left, state.scale);
       if (props.transitionEnd !== undefined) {
         return transform;
