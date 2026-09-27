@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { action, when } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { encodeFilePath } from 'common/fs';
@@ -20,6 +20,8 @@ interface FaceWithPerson {
   fileId: ID;
 }
 
+type FaceTileData = FaceWithPerson & FaceBox & { descriptor?: number[] };
+
 /** Faces are re-fetched after every this-many processed files (and when a run finishes), rather
  * than on every single progress tick. */
 const REFRESH_EVERY_N_PROCESSED = 25;
@@ -38,6 +40,53 @@ export function faceBoxStyle(box: NormalizedBox): React.CSSProperties {
     width: `${box.width * 100}%`,
     height: `${box.height * 100}%`,
   };
+}
+
+/** Smallest box side used when cropping, so a degenerate (0-size) stored box can't produce an
+ * infinite scale. */
+const MIN_CROP_SIDE = 0.01;
+
+/** CSS for an <img> inside a square, `overflow: hidden`, `position: relative` frame, scaled and
+ * shifted so the frame shows exactly the normalized `box` region of the image. Width/left
+ * percentages resolve against the frame's width and height/top against its height, so this works
+ * at any frame size without knowing the image's pixel dimensions. A face box is roughly square in
+ * pixels, so stretching it to the square frame barely distorts it. */
+export function faceCropStyle(box: NormalizedBox): React.CSSProperties {
+  const width = Math.max(box.width, MIN_CROP_SIDE);
+  const height = Math.max(box.height, MIN_CROP_SIDE);
+  return {
+    position: 'absolute',
+    left: `${(-box.x / width) * 100}%`,
+    top: `${(-box.y / height) * 100}%`,
+    width: `${100 / width}%`,
+    height: `${100 / height}%`,
+    maxWidth: 'none',
+    maxHeight: 'none',
+  };
+}
+
+/** The face a person's tile shows: the one their `representativeDescriptor` was taken from (the
+ * first face ever assigned to them), if it's still among `faces`; otherwise just the first face. */
+export function pickRepresentativeFace<T extends { descriptor?: number[] }>(
+  faces: T[],
+  representativeDescriptor: number[],
+): T | undefined {
+  const isRepresentative = (d: number[] | undefined) =>
+    d !== undefined &&
+    d.length === representativeDescriptor.length &&
+    d.every((v, i) => v === representativeDescriptor[i]);
+  return faces.find((f) => isRepresentative(f.descriptor)) ?? faces[0];
+}
+
+/** Whether the person gallery's name field should be (re)filled from the loaded person: only
+ * the first time a given person's data arrives, NOT on the periodic refreshes while detection
+ * runs — those would overwrite whatever the user is typing. */
+export function shouldSyncNameDraft(
+  syncedForPersonId: ID | null,
+  personId: ID,
+  loadedPerson: PersonDTO | undefined,
+): boolean {
+  return loadedPerson !== undefined && syncedForPersonId !== personId;
 }
 
 /** Groups face rows by their fileId. */
@@ -104,36 +153,39 @@ const getThumbnail = action((file: ClientFile) => file.thumbnailPath);
 /** Shows the file's (generated-on-demand) thumbnail — never the full-resolution original, which
  * could be huge or in a format <img> can't show (HEIC, RAW...). A placeholder is shown until the
  * thumbnail exists, or if it can't be generated. */
-const FaceThumbnail = observer(({ file }: { file: ClientFile }) => {
-  const { imageLoader } = useStore();
-  const imageSource = usePromise(file, async (file: ClientFile) => {
-    const freshlyGenerated = await imageLoader.ensureThumbnail(file);
-    // Once generated, the thumbnailPath gets a `?v=1` suffix (same as GalleryItem's Thumbnail)
-    if (freshlyGenerated) {
-      await when(() => getThumbnail(file).endsWith('?v=1'), { timeout: 10000 });
-    }
-    return getThumbnail(file);
-  });
-  const [loadError, setLoadError] = useState(false);
+const FaceThumbnail = observer(
+  ({ file, imgStyle }: { file: ClientFile; imgStyle?: React.CSSProperties }) => {
+    const { imageLoader } = useStore();
+    const imageSource = usePromise(file, async (file: ClientFile) => {
+      const freshlyGenerated = await imageLoader.ensureThumbnail(file);
+      // Once generated, the thumbnailPath gets a `?v=1` suffix (same as GalleryItem's Thumbnail)
+      if (freshlyGenerated) {
+        await when(() => getThumbnail(file).endsWith('?v=1'), { timeout: 10000 });
+      }
+      return getThumbnail(file);
+    });
+    const [loadError, setLoadError] = useState(false);
 
-  if (imageSource.tag === 'ready' && 'ok' in imageSource.value && !loadError) {
-    return (
-      <img
-        src={encodeFilePath(imageSource.value.ok)}
-        alt={file.name}
-        onError={() => setLoadError(true)}
-      />
-    );
-  }
-  return <div className="face-gallery-placeholder" title={file.name} />;
-});
+    if (imageSource.tag === 'ready' && 'ok' in imageSource.value && !loadError) {
+      return (
+        <img
+          src={encodeFilePath(imageSource.value.ok)}
+          alt={file.name}
+          style={imgStyle}
+          onError={() => setLoadError(true)}
+        />
+      );
+    }
+    return <div className="face-gallery-placeholder" title={file.name} />;
+  },
+);
 
 /** The default view: one tile per person. */
 const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observer(
   ({ onSelectPerson }) => {
     const { fileStore, faceDetectionStore } = useStore();
     const [people, setPeople] = useState<PersonDTO[]>([]);
-    const [facesByFile, setFacesByFile] = useState<Map<string, FaceWithPerson[]>>(new Map());
+    const [facesByFile, setFacesByFile] = useState<Map<string, FaceTileData[]>>(new Map());
 
     const refreshTick = faceDetectionStore.isRunning
       ? Math.floor(faceDetectionStore.processedCount / REFRESH_EVERY_N_PROCESSED)
@@ -159,32 +211,48 @@ const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observe
 
     // Representative face + its file, per person — for the tile thumbnail + box crop.
     const allFaces = Array.from(facesByFile.values()).flat();
-    const facesByPerson = groupFacesByPerson(allFaces as (FaceWithPerson & FaceBox)[]);
+    const facesByPerson = groupFacesByPerson(allFaces);
+    const filesById = useMemo(
+      () => new Map(fileStore.fileList.map((f) => [f.id, f])),
+      [fileStore.fileList],
+    );
 
+    // Toolbar and grid are siblings: the toolbar is a non-wrapping flex row, so a grid nested
+    // inside it would be squeezed in next to the status text instead of laid out below it.
     return (
-      <div className="face-gallery-toolbar">
-        {faceDetectionStore.isRunning && (
-          <span className="face-detection-progress">
-            Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
-          </span>
-        )}
-        {faceDetectionStore.modelLoadFailed && (
-          <span className="face-detection-error">
-            Face detection is unavailable: the detection model failed to load.
-          </span>
-        )}
+      <>
+        <div className="face-gallery-toolbar">
+          {faceDetectionStore.isRunning && (
+            <span className="face-detection-progress">
+              Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
+            </span>
+          )}
+          {faceDetectionStore.modelLoadFailed && (
+            <span className="face-detection-error">
+              Face detection is unavailable: the detection model failed to load.
+            </span>
+          )}
+        </div>
         <div className="people-grid">
           {people.map((person) => {
-            const count = facesByPerson.get(person.id)?.length ?? 0;
+            const faces = facesByPerson.get(person.id) ?? [];
+            const count = faces.length;
             if (count === 0) {
               return null; // no photos of this person currently loaded/matching the file list
             }
+            const face = pickRepresentativeFace(faces, person.representativeDescriptor);
+            const faceFile = face !== undefined ? filesById.get(face.fileId) : undefined;
             return (
               <button
                 key={person.id}
                 className="person-tile"
                 onClick={() => onSelectPerson(person.id)}
               >
+                <div className="person-tile-face">
+                  {face !== undefined && faceFile !== undefined && (
+                    <FaceThumbnail file={faceFile} imgStyle={faceCropStyle(face.boundingBox)} />
+                  )}
+                </div>
                 <span className="person-tile-name">{person.name || 'Unnamed'}</span>
                 <span className="person-tile-count">
                   {count} photo{count === 1 ? '' : 's'}
@@ -196,7 +264,7 @@ const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observe
             <span className="face-gallery-empty">No people found yet.</span>
           )}
         </div>
-      </div>
+      </>
     );
   },
 );
@@ -209,6 +277,8 @@ const PersonGallery: React.FC<{ personId: ID; onBack: () => void }> = observer(
     const [facesForPerson, setFacesForPerson] = useState<(FaceWithPerson & FaceBox)[]>([]);
     const [showBoxes, setShowBoxes] = useState(true);
     const [nameDraft, setNameDraft] = useState('');
+    // The person the name field was last filled for (see shouldSyncNameDraft)
+    const nameDraftSyncedFor = useRef<ID | null>(null);
 
     const refreshTick = faceDetectionStore.isRunning
       ? Math.floor(faceDetectionStore.processedCount / REFRESH_EVERY_N_PROCESSED)
@@ -226,7 +296,10 @@ const PersonGallery: React.FC<{ personId: ID; onBack: () => void }> = observer(
           }
           const found = people.find((p) => p.id === personId);
           setPerson(found);
-          setNameDraft(found?.name ?? '');
+          if (shouldSyncNameDraft(nameDraftSyncedFor.current, personId, found)) {
+            nameDraftSyncedFor.current = personId;
+            setNameDraft(found!.name);
+          }
           setFacesForPerson(
             (faces as (FaceWithPerson & FaceBox)[]).filter((f) => f.personId === personId),
           );
@@ -246,29 +319,32 @@ const PersonGallery: React.FC<{ personId: ID; onBack: () => void }> = observer(
         .catch((err) => console.error('Could not rename person', err));
     };
 
+    // Toolbar and grid are siblings (see PeopleGrid)
     return (
-      <div className="face-gallery-toolbar">
-        <button onClick={onBack}>Back to people</button>
-        <input
-          className="person-name-input"
-          value={nameDraft}
-          placeholder="Unnamed"
-          onChange={(e) => setNameDraft(e.target.value)}
-          onBlur={commitName}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.currentTarget.blur();
-            }
-          }}
-        />
-        <button onClick={() => setShowBoxes((v) => !v)}>
-          {showBoxes ? 'Hide face box' : 'Show face box'}
-        </button>
-        {faceDetectionStore.isRunning && (
-          <span className="face-detection-progress">
-            Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
-          </span>
-        )}
+      <>
+        <div className="face-gallery-toolbar">
+          <button onClick={onBack}>Back to people</button>
+          <input
+            className="person-name-input"
+            value={nameDraft}
+            placeholder="Unnamed"
+            onChange={(e) => setNameDraft(e.target.value)}
+            onBlur={commitName}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.currentTarget.blur();
+              }
+            }}
+          />
+          <button onClick={() => setShowBoxes((v) => !v)}>
+            {showBoxes ? 'Hide face box' : 'Show face box'}
+          </button>
+          {faceDetectionStore.isRunning && (
+            <span className="face-detection-progress">
+              Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
+            </span>
+          )}
+        </div>
         <div className="face-gallery-grid">
           {filesForPerson.map((file) => (
             <div key={file.id} className="face-gallery-item">
@@ -283,7 +359,7 @@ const PersonGallery: React.FC<{ personId: ID; onBack: () => void }> = observer(
         {person === undefined && (
           <span className="face-gallery-empty">This person could not be found.</span>
         )}
-      </div>
+      </>
     );
   },
 );
