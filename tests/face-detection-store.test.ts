@@ -411,4 +411,57 @@ describe('FaceDetectionStore', () => {
     expect(savedPeople).toHaveLength(1); // exactly one person created, not up to 3
     expect(new Set(savedFaces.map((f) => f.personId)).size).toBe(1);
   });
+
+  it('retries fetchAllPeople on a later call after a transient failure, instead of staying permanently broken', async () => {
+    // Regression test: a naive fix that memoizes the fetchAllPeople promise but never resets it on
+    // rejection would leave every future call awaiting the same already-rejected promise forever,
+    // so face detection would work for zero files ever again after one transient DB error.
+    let shouldFail = true;
+    const dataStorage = {
+      fetchFacesForFiles: async () => [],
+      fetchFaceDetectionStatuses: async () => [],
+      fetchAllPeople: async () => {
+        if (shouldFail) {
+          throw new Error('transient DB error');
+        }
+        return [];
+      },
+      saveFaceDetectionResult: async (
+        _status: FaceDetectionStatusDTO,
+        _faces: FaceDTO[],
+        _newPeople: PersonDTO[],
+      ) => {},
+    };
+    const detectForFile = async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: new Array(128).fill(0.4) },
+    ];
+    const store = new FaceDetectionStore(dataStorage as any, detectForFile);
+
+    // First file: fetchAllPeople rejects. Caught and logged per-file; doesn't stall the queue.
+    await store.enqueueFiles([{ id: 'f1', absolutePath: '/a.jpg', dateLastIndexed: new Date() }]);
+    expect(store.processedCount).toBe(1);
+    expect(store.isRunning).toBe(false);
+
+    // fetchAllPeople now works again (e.g. the transient error cleared).
+    shouldFail = false;
+    const savedPeople: PersonDTO[] = [];
+    const savedFaces: FaceDTO[] = [];
+    dataStorage.saveFaceDetectionResult = async (
+      _status: FaceDetectionStatusDTO,
+      faces: FaceDTO[],
+      newPeople: PersonDTO[],
+    ) => {
+      savedFaces.push(...faces);
+      savedPeople.push(...newPeople);
+    };
+
+    // A later file must succeed, not immediately re-throw the earlier rejection.
+    await store.enqueueFiles([{ id: 'f2', absolutePath: '/b.jpg', dateLastIndexed: new Date() }]);
+
+    // processedCount restarts at 0 for this fresh run (isRunning was false after the first drain).
+    expect(store.processedCount).toBe(1);
+    expect(savedPeople).toHaveLength(1);
+    expect(savedFaces).toHaveLength(1);
+    expect(savedFaces[0].personId).toBe(savedPeople[0].id);
+  });
 });

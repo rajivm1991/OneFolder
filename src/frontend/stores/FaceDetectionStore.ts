@@ -138,12 +138,20 @@ export class FaceDetectionStore {
    * overwrite `this.peopleCache`, discarding any Person(s) the other runner's `assignPerson` call
    * pushed into it in the meantime — the same race `assignPerson` guards against, one level up.
    * Assigning `this.peopleCachePromise` happens synchronously (no `await` before it), so all
-   * concurrent callers end up awaiting the identical promise instead of racing independent fetches. */
+   * concurrent callers end up awaiting the identical promise instead of racing independent fetches.
+   * On rejection (e.g. a transient DB error), the promise is reset back to `undefined` so a future
+   * call retries instead of every subsequent call for the rest of this instance's lifetime
+   * `await`-ing the same already-rejected promise and throwing immediately with no way to recover. */
   private async ensurePeopleCacheLoaded(): Promise<void> {
     if (this.peopleCachePromise === undefined) {
       this.peopleCachePromise = this.dataStorage.fetchAllPeople();
     }
-    this.peopleCache = await this.peopleCachePromise;
+    try {
+      this.peopleCache = await this.peopleCachePromise;
+    } catch (err) {
+      this.peopleCachePromise = undefined; // allow a future call to retry
+      throw err;
+    }
   }
 
   /**
