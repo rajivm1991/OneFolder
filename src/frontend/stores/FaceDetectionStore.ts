@@ -17,6 +17,7 @@ interface DetectedFace {
 interface FaceDetectionDataStorage {
   fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]>;
   fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]>;
+  fetchAllPeople(): Promise<PersonDTO[]>;
   saveFaceDetectionResult(
     status: FaceDetectionStatusDTO,
     faces: FaceDTO[],
@@ -26,6 +27,19 @@ interface FaceDetectionDataStorage {
 
 const CONCURRENCY = 3;
 const MAX_RETRIES_PER_FILE = 1;
+
+/** Euclidean distance below which two face descriptors are considered the same person — the
+ * standard working value for 128-d face-recognition embeddings (not user-facing/tunable). */
+const PERSON_MATCH_THRESHOLD = 0.6;
+
+function euclideanDistance(a: number[], b: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const diff = a[i] - b[i];
+    sum += diff * diff;
+  }
+  return Math.sqrt(sum);
+}
 
 /** The bundled model failed to load — permanent for the whole session, never retried per-file. */
 export class ModelLoadError extends Error {}
@@ -56,6 +70,7 @@ export class FaceDetectionStore {
   private readonly queue = new Map<ID, FileForDetection>();
   private readonly inFlight = new Set<ID>();
   private drainPromise: Promise<void> | undefined;
+  private peopleCache: PersonDTO[] | undefined;
 
   constructor(
     private dataStorage: FaceDetectionDataStorage,
@@ -112,6 +127,46 @@ export class FaceDetectionStore {
       this.drainPromise = this.drain();
     }
     return this.drainPromise;
+  }
+
+  /** Loads the cache once; safe to call every drain start, cheap after the first call within a
+   * session since it's just a field check. */
+  private async ensurePeopleCacheLoaded(): Promise<void> {
+    if (this.peopleCache === undefined) {
+      this.peopleCache = await this.dataStorage.fetchAllPeople();
+    }
+  }
+
+  /**
+   * Synchronous and `await`-free by design: this is the ONLY place a new Person can be created,
+   * and it must run to completion without yielding to another concurrent runner's call, or two
+   * files processed in the same batch could both decide "no match" for the same new person and
+   * each create their own — this function's synchronous push onto `this.peopleCache` closes that
+   * window, since JS never interleaves between two synchronous statements.
+   */
+  private assignPerson(descriptor: number[]): { personId: ID; newPerson: PersonDTO | undefined } {
+    const cache = this.peopleCache;
+    if (cache === undefined) {
+      throw new Error('assignPerson called before ensurePeopleCacheLoaded');
+    }
+    let best: { person: PersonDTO; distance: number } | undefined;
+    for (const person of cache) {
+      const distance = euclideanDistance(descriptor, person.representativeDescriptor);
+      if (best === undefined || distance < best.distance) {
+        best = { person, distance };
+      }
+    }
+    if (best !== undefined && best.distance < PERSON_MATCH_THRESHOLD) {
+      return { personId: best.person.id, newPerson: undefined };
+    }
+    const newPerson: PersonDTO = {
+      id: generateId(),
+      name: '',
+      representativeDescriptor: descriptor,
+      dateCreated: new Date(),
+    };
+    cache.push(newPerson); // synchronous — visible to the next assignPerson call immediately
+    return { personId: newPerson.id, newPerson };
   }
 
   private takeNext(): FileForDetection | undefined {
@@ -180,18 +235,26 @@ export class FaceDetectionStore {
     }
 
     try {
-      await this.dataStorage.saveFaceDetectionResult(
-        { fileId: file.id, status, dateDetected: startedAt },
-        faces.map((f) => ({
+      await this.ensurePeopleCacheLoaded();
+      const newPeople: PersonDTO[] = [];
+      const faceDTOs: FaceDTO[] = faces.map((f) => {
+        const { personId, newPerson } = this.assignPerson(f.descriptor);
+        if (newPerson !== undefined) {
+          newPeople.push(newPerson);
+        }
+        return {
           id: generateId(),
           fileId: file.id,
           boundingBox: f.boundingBox,
           descriptor: f.descriptor,
-          personId: null,
+          personId,
           dateDetected: startedAt,
-        })),
-        // TODO(Task 3): cluster detected faces into people and pass any newly created ones here.
-        [],
+        };
+      });
+      await this.dataStorage.saveFaceDetectionResult(
+        { fileId: file.id, status, dateDetected: startedAt },
+        faceDTOs,
+        newPeople,
       );
     } catch (err) {
       // e.g. the file was removed from the DB meanwhile; don't let it stall the queue

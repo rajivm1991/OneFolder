@@ -1,4 +1,5 @@
 import { FaceDetectionStatusDTO, FaceDTO } from '../src/api/face';
+import { PersonDTO } from '../src/api/person';
 import {
   FaceDetectionStore,
   FileForDetection,
@@ -11,19 +12,27 @@ import {
 function createFakeStorage(initialStatuses: FaceDetectionStatusDTO[] = []) {
   const statuses = new Map(initialStatuses.map((s) => [s.fileId, s]));
   const faces: FaceDTO[] = [];
+  const people: PersonDTO[] = [];
   return {
     statuses,
     faces,
+    people,
     fetchFacesForFiles: async (ids: string[]) => faces.filter((f) => ids.includes(f.fileId)),
     fetchFaceDetectionStatuses: async (ids: string[]) =>
       ids.map((id) => statuses.get(id)).filter((s): s is FaceDetectionStatusDTO => !!s),
-    saveFaceDetectionResult: async (status: FaceDetectionStatusDTO, newFaces: FaceDTO[]) => {
+    fetchAllPeople: async () => people,
+    saveFaceDetectionResult: async (
+      status: FaceDetectionStatusDTO,
+      newFaces: FaceDTO[],
+      newPeople: PersonDTO[],
+    ) => {
       for (let i = faces.length - 1; i >= 0; i--) {
         if (faces[i].fileId === status.fileId) {
           faces.splice(i, 1);
         }
       }
       faces.push(...newFaces);
+      people.push(...newPeople);
       statuses.set(status.fileId, status);
     },
   };
@@ -249,15 +258,111 @@ describe('FaceDetectionStore', () => {
   it('keeps draining when saving a result fails', async () => {
     const storage = createFakeStorage();
     const save = storage.saveFaceDetectionResult;
-    storage.saveFaceDetectionResult = async (status, faces) => {
+    storage.saveFaceDetectionResult = async (status, faces, newPeople) => {
       if (status.fileId === 'a') {
         throw new Error('DB error');
       }
-      return save(status, faces);
+      return save(status, faces, newPeople);
     };
     const store = new FaceDetectionStore(storage, async () => []);
     await store.enqueueFiles([file('a'), file('b')]);
     expect(store.processedCount).toBe(2);
     expect(storage.statuses.has('b')).toBe(true);
+  });
+
+  it('assigns a new person to a face that matches no existing person', async () => {
+    const savedPeople: PersonDTO[] = [];
+    const savedFaces: FaceDTO[] = [];
+    const dataStorage = {
+      fetchFacesForFiles: async () => [],
+      fetchFaceDetectionStatuses: async () => [],
+      fetchAllPeople: async () => [],
+      saveFaceDetectionResult: async (
+        _status: FaceDetectionStatusDTO,
+        faces: FaceDTO[],
+        newPeople: PersonDTO[],
+      ) => {
+        savedFaces.push(...faces);
+        savedPeople.push(...newPeople);
+      },
+    };
+    const detectForFile = async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: new Array(128).fill(0.1) },
+    ];
+    const store = new FaceDetectionStore(dataStorage as any, detectForFile);
+
+    await store.enqueueFiles([{ id: 'f1', absolutePath: '/a.jpg', dateLastIndexed: new Date() }]);
+
+    expect(savedPeople).toHaveLength(1);
+    expect(savedFaces).toHaveLength(1);
+    expect(savedFaces[0].personId).toBe(savedPeople[0].id);
+  });
+
+  it('assigns an existing person to a face with a close-enough descriptor, without creating a new one', async () => {
+    const closeDescriptor = new Array(128).fill(0.1);
+    closeDescriptor[0] = 0.11; // small perturbation, well under the 0.6 threshold
+    const existingPerson: PersonDTO = {
+      id: 'person-existing',
+      name: 'Known',
+      representativeDescriptor: new Array(128).fill(0.1),
+      dateCreated: new Date(),
+    };
+    const savedPeople: PersonDTO[] = [];
+    const savedFaces: FaceDTO[] = [];
+    const dataStorage = {
+      fetchFacesForFiles: async () => [],
+      fetchFaceDetectionStatuses: async () => [],
+      fetchAllPeople: async () => [existingPerson],
+      saveFaceDetectionResult: async (
+        _status: FaceDetectionStatusDTO,
+        faces: FaceDTO[],
+        newPeople: PersonDTO[],
+      ) => {
+        savedFaces.push(...faces);
+        savedPeople.push(...newPeople);
+      },
+    };
+    const detectForFile = async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: closeDescriptor },
+    ];
+    const store = new FaceDetectionStore(dataStorage as any, detectForFile);
+
+    await store.enqueueFiles([{ id: 'f1', absolutePath: '/a.jpg', dateLastIndexed: new Date() }]);
+
+    expect(savedPeople).toHaveLength(0); // no new person created
+    expect(savedFaces[0].personId).toBe('person-existing');
+  });
+
+  it('assigns two faces of the same new person (from different files in the same batch) to the SAME person, not two', async () => {
+    const sharedDescriptor = new Array(128).fill(0.2);
+    const savedPeople: PersonDTO[] = [];
+    const savedFaces: FaceDTO[] = [];
+    const dataStorage = {
+      fetchFacesForFiles: async () => [],
+      fetchFaceDetectionStatuses: async () => [],
+      fetchAllPeople: async () => [],
+      saveFaceDetectionResult: async (
+        _status: FaceDetectionStatusDTO,
+        faces: FaceDTO[],
+        newPeople: PersonDTO[],
+      ) => {
+        savedFaces.push(...faces);
+        savedPeople.push(...newPeople);
+      },
+    };
+    // Both files' faces have (near-)identical descriptors, simulating two photos of the same
+    // new person processed concurrently (CONCURRENCY = 3, so both are in-flight together).
+    const detectForFile = async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: sharedDescriptor },
+    ];
+    const store = new FaceDetectionStore(dataStorage as any, detectForFile);
+
+    await store.enqueueFiles([
+      { id: 'f1', absolutePath: '/a.jpg', dateLastIndexed: new Date() },
+      { id: 'f2', absolutePath: '/b.jpg', dateLastIndexed: new Date() },
+    ]);
+
+    expect(savedPeople).toHaveLength(1); // exactly one person created, not two
+    expect(new Set(savedFaces.map((f) => f.personId)).size).toBe(1);
   });
 });
