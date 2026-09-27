@@ -1,5 +1,7 @@
 import * as faceapi from 'face-api.js';
 
+import { getExtraResourcePath } from '../../../common/fs';
+
 let modelsLoaded = false;
 let modelsFailedToLoad = false;
 
@@ -56,7 +58,7 @@ function bitmapToImageData(bitmap: ImageBitmap): ImageData {
 
 export async function detectFacesInImageBitmap(
   bitmap: ImageBitmap,
-  modelsUri = './resources/models',
+  modelsUri = getExtraResourcePath('models'),
 ): Promise<DetectedFace[]> {
   await ensureModelsLoaded(modelsUri);
 
