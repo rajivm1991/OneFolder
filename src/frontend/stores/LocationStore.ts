@@ -178,6 +178,12 @@ class LocationStore {
         50, // Matches the concurrency limit already used for the similar bulk case in initLocation (below)
       );
 
+      this.rootStore.faceDetectionStore
+        .runDetectionBatch(
+          createdFiles.map((f) => ({ id: f.id, absolutePath: f.absolutePath, dateModified: f.dateModified })),
+        )
+        .catch((err) => console.error('Face detection batch failed', err));
+
       // Find all files of this location that have been removed (those in DB but not on disk anymore)
       const missingFiles = dbFiles.filter(
         (file) => file.locationId === location.id && !diskFileMap.has(file.absolutePath),
@@ -309,6 +315,12 @@ class LocationStore {
       if (updatedFiles.length > 0) {
         console.debug('Re-indexed files changed on disk', updatedFiles);
         await this.backend.saveFiles(updatedFiles);
+
+        this.rootStore.faceDetectionStore
+          .runDetectionBatch(
+            updatedFiles.map((f) => ({ id: f.id, absolutePath: f.absolutePath, dateModified: f.dateModified })),
+          )
+          .catch((err) => console.error('Face detection batch failed', err));
       }
 
       console.groupEnd();
@@ -474,6 +486,10 @@ class LocationStore {
       showProgressToaster,
       () => isCancelled,
     );
+
+    this.rootStore.faceDetectionStore
+      .runDetectionBatch(files.map((f) => ({ id: f.id, absolutePath: f.absolutePath, dateModified: f.dateModified })))
+      .catch((err) => console.error('Face detection batch failed', err));
 
     AppToaster.show({ message: 'Updating database...', timeout: 0 }, toastKey);
     await this.backend.createFilesFromPath(location.path, files);
