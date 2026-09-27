@@ -61,7 +61,8 @@
       ]
     },
     "extraResources": [
-      "resources/themes"
+      "resources/themes",
+      "resources/models"
     ],
     "nsis": {
       "oneClick": false,
@@ -142,6 +143,7 @@
     "dexie-export-import": "^1.0.3",
     "electron-google-analytics4": "^1.1.1",
     "electron-updater": "^6.1.7",
+    "face-api.js": "^0.22.2",
     "fs-extra": "^11.1.0",
     "geo-coordinates-parser": "^1.6.3",
     "libheif-js": "^1.17.1",
