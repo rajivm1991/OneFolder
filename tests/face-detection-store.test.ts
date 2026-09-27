@@ -21,6 +21,12 @@ function createFakeStorage(initialStatuses: FaceDetectionStatusDTO[] = []) {
     fetchFaceDetectionStatuses: async (ids: string[]) =>
       ids.map((id) => statuses.get(id)).filter((s): s is FaceDetectionStatusDTO => !!s),
     fetchAllPeople: async () => people,
+    renamePerson: async (personId: string, name: string) => {
+      const person = people.find((p) => p.id === personId);
+      if (person !== undefined) {
+        person.name = name;
+      }
+    },
     saveFaceDetectionResult: async (
       status: FaceDetectionStatusDTO,
       newFaces: FaceDTO[],

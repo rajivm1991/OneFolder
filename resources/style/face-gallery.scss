@@ -44,3 +44,34 @@
   box-sizing: border-box;
   pointer-events: none;
 }
+
+.people-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px;
+}
+
+.person-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px;
+  border: none;
+  background: none;
+  cursor: pointer;
+}
+
+.person-tile-name {
+  font-weight: 600;
+}
+
+.person-tile-count {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+.person-name-input {
+  font-weight: 600;
+}

@@ -18,6 +18,7 @@ interface FaceDetectionDataStorage {
   fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]>;
   fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]>;
   fetchAllPeople(): Promise<PersonDTO[]>;
+  renamePerson(personId: ID, name: string): Promise<void>;
   saveFaceDetectionResult(
     status: FaceDetectionStatusDTO,
     faces: FaceDTO[],
@@ -82,6 +83,20 @@ export class FaceDetectionStore {
 
   async getFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]> {
     return this.dataStorage.fetchFacesForFiles(fileIds);
+  }
+
+  async getAllPeople(): Promise<PersonDTO[]> {
+    return this.dataStorage.fetchAllPeople();
+  }
+
+  async renamePerson(personId: ID, name: string): Promise<void> {
+    await this.dataStorage.renamePerson(personId, name);
+    // Keep the in-memory cache used for clustering consistent with the rename, so a
+    // newly-detected face's person still shows its latest name without a full reload.
+    const cached = this.peopleCache?.find((p) => p.id === personId);
+    if (cached !== undefined) {
+      cached.name = name;
+    }
   }
 
   /**
