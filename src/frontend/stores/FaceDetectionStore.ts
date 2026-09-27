@@ -71,6 +71,7 @@ export class FaceDetectionStore {
   private readonly inFlight = new Set<ID>();
   private drainPromise: Promise<void> | undefined;
   private peopleCache: PersonDTO[] | undefined;
+  private peopleCachePromise: Promise<PersonDTO[]> | undefined;
 
   constructor(
     private dataStorage: FaceDetectionDataStorage,
@@ -130,11 +131,19 @@ export class FaceDetectionStore {
   }
 
   /** Loads the cache once; safe to call every drain start, cheap after the first call within a
-   * session since it's just a field check. */
+   * session since it's just a field check. Memoizes the in-flight PROMISE (not just the resolved
+   * value): if this were `if (this.peopleCache === undefined) { this.peopleCache = await ... }`,
+   * two concurrent runners could both pass the `undefined` check before either's fetch resolves,
+   * each kick off their own `fetchAllPeople()`, and whichever resolves last would unconditionally
+   * overwrite `this.peopleCache`, discarding any Person(s) the other runner's `assignPerson` call
+   * pushed into it in the meantime — the same race `assignPerson` guards against, one level up.
+   * Assigning `this.peopleCachePromise` happens synchronously (no `await` before it), so all
+   * concurrent callers end up awaiting the identical promise instead of racing independent fetches. */
   private async ensurePeopleCacheLoaded(): Promise<void> {
-    if (this.peopleCache === undefined) {
-      this.peopleCache = await this.dataStorage.fetchAllPeople();
+    if (this.peopleCachePromise === undefined) {
+      this.peopleCachePromise = this.dataStorage.fetchAllPeople();
     }
+    this.peopleCache = await this.peopleCachePromise;
   }
 
   /**
@@ -143,6 +152,12 @@ export class FaceDetectionStore {
    * files processed in the same batch could both decide "no match" for the same new person and
    * each create their own — this function's synchronous push onto `this.peopleCache` closes that
    * window, since JS never interleaves between two synchronous statements.
+   *
+   * This alone is NOT sufficient for end-to-end race safety: it assumes `this.peopleCache` is
+   * already a single shared array that every concurrent caller reads and pushes into. That
+   * invariant depends on `ensurePeopleCacheLoaded` memoizing the in-flight fetch promise (not just
+   * the resolved value) so concurrent runners don't each populate their own independent cache
+   * snapshot — see its doc comment for that half of the fix.
    */
   private assignPerson(descriptor: number[]): { personId: ID; newPerson: PersonDTO | undefined } {
     const cache = this.peopleCache;

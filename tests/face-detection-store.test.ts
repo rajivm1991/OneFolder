@@ -365,4 +365,50 @@ describe('FaceDetectionStore', () => {
     expect(savedPeople).toHaveLength(1); // exactly one person created, not two
     expect(new Set(savedFaces.map((f) => f.personId)).size).toBe(1);
   });
+
+  it('memoizes the in-flight fetchAllPeople call so concurrent runners share one cache, even under variable latency', async () => {
+    // Regression test for a TOCTOU bug: an implementation that memoizes only the RESOLVED value
+    // (`if (this.peopleCache === undefined) { this.peopleCache = await fetchAllPeople(); }`) lets
+    // two concurrent runners both pass the `undefined` check before either fetch resolves, each
+    // kick off their own fetchAllPeople() call, and have the later one overwrite the cache and
+    // silently drop any Person the other runner already pushed into it via assignPerson.
+    // fetchAllPeople's first call is made artificially slow (and its second call, if any, fast) so
+    // a "last write wins" bug reliably surfaces instead of depending on incidental mock timing.
+    let fetchAllPeopleCallCount = 0;
+    const sharedDescriptor = new Array(128).fill(0.3);
+    const savedPeople: PersonDTO[] = [];
+    const savedFaces: FaceDTO[] = [];
+    const dataStorage = {
+      fetchFacesForFiles: async () => [],
+      fetchFaceDetectionStatuses: async () => [],
+      fetchAllPeople: async () => {
+        fetchAllPeopleCallCount += 1;
+        const isFirstCall = fetchAllPeopleCallCount === 1;
+        await new Promise((r) => setTimeout(r, isFirstCall ? 20 : 0));
+        return [];
+      },
+      saveFaceDetectionResult: async (
+        _status: FaceDetectionStatusDTO,
+        faces: FaceDTO[],
+        newPeople: PersonDTO[],
+      ) => {
+        savedFaces.push(...faces);
+        savedPeople.push(...newPeople);
+      },
+    };
+    const detectForFile = async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: sharedDescriptor },
+    ];
+    const store = new FaceDetectionStore(dataStorage as any, detectForFile);
+
+    await store.enqueueFiles([
+      { id: 'f1', absolutePath: '/a.jpg', dateLastIndexed: new Date() },
+      { id: 'f2', absolutePath: '/b.jpg', dateLastIndexed: new Date() },
+      { id: 'f3', absolutePath: '/c.jpg', dateLastIndexed: new Date() },
+    ]);
+
+    expect(fetchAllPeopleCallCount).toBe(1); // all 3 concurrent runners shared one fetch
+    expect(savedPeople).toHaveLength(1); // exactly one person created, not up to 3
+    expect(new Set(savedFaces.map((f) => f.personId)).size).toBe(1);
+  });
 });
