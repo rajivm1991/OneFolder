@@ -104,6 +104,13 @@ export function initSqliteSchema(db: Database.Database): void {
       status TEXT NOT NULL,
       dateDetected TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS people (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      representativeDescriptor TEXT NOT NULL,
+      dateCreated TEXT NOT NULL
+    );
   `);
 
   // CREATE TABLE IF NOT EXISTS never adds columns to an existing table, so context files created

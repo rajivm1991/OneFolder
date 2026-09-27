@@ -8,6 +8,7 @@ import { FaceDetectionStatusDTO, FaceDTO } from '../api/face';
 import { FileDTO } from '../api/file';
 import { generateId, ID } from '../api/id';
 import { LocationDTO } from '../api/location';
+import { PersonDTO } from '../api/person';
 import { FileSearchDTO } from '../api/file-search';
 import { ROOT_TAG_ID, TagDTO } from '../api/tag';
 import { VisualHashDTO } from '../api/visual-hash';
@@ -54,6 +55,15 @@ function rowToFaceDTO(row: any): FaceDTO {
     descriptor: JSON.parse(row.descriptor),
     personId: row.personId ?? null,
     dateDetected: new Date(row.dateDetected),
+  };
+}
+
+function rowToPersonDTO(row: any): PersonDTO {
+  return {
+    id: row.id,
+    name: row.name,
+    representativeDescriptor: JSON.parse(row.representativeDescriptor),
+    dateCreated: new Date(row.dateCreated),
   };
 }
 
@@ -228,6 +238,11 @@ export class SqliteBackend implements DataStorage {
     const run = this.#db.transaction((locationId: ID) => {
       this.#db.prepare('DELETE FROM files WHERE locationId = ?').run(locationId);
       this.#db.prepare('DELETE FROM locations WHERE id = ?').run(locationId);
+      this.#db
+        .prepare(
+          'DELETE FROM people WHERE id NOT IN (SELECT DISTINCT personId FROM faces WHERE personId IS NOT NULL)',
+        )
+        .run();
     });
     run(location);
     this.#notifyChange();
@@ -433,8 +448,16 @@ export class SqliteBackend implements DataStorage {
     if (files.length === 0) {
       return;
     }
-    const placeholders = files.map(() => '?').join(',');
-    this.#db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).run(...files);
+    const run = this.#db.transaction((ids: ID[]) => {
+      const placeholders = ids.map(() => '?').join(',');
+      this.#db.prepare(`DELETE FROM files WHERE id IN (${placeholders})`).run(...ids);
+      this.#db
+        .prepare(
+          'DELETE FROM people WHERE id NOT IN (SELECT DISTINCT personId FROM faces WHERE personId IS NOT NULL)',
+        )
+        .run();
+    });
+    run(files);
     this.#notifyChange();
   }
 
@@ -561,36 +584,73 @@ export class SqliteBackend implements DataStorage {
     }));
   }
 
-  async saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void> {
-    const run = this.#db.transaction((s: FaceDetectionStatusDTO, fs: FaceDTO[]) => {
-      this.#db.prepare('DELETE FROM faces WHERE file_id = ?').run(s.fileId);
-      const insert = this.#db.prepare(`
-        INSERT INTO faces (id, file_id, boundingBox, descriptor, personId, dateDetected)
-        VALUES (@id, @file_id, @boundingBox, @descriptor, @personId, @dateDetected)
-      `);
-      for (const f of fs) {
-        insert.run({
-          id: f.id ?? generateId(),
-          file_id: f.fileId,
-          boundingBox: JSON.stringify(f.boundingBox),
-          descriptor: JSON.stringify(f.descriptor),
-          personId: f.personId ?? null,
-          dateDetected: f.dateDetected.toISOString(),
-        });
-      }
-      this.#db
-        .prepare(
-          `INSERT INTO face_detection_status (file_id, status, dateDetected)
-           VALUES (@file_id, @status, @dateDetected)
-           ON CONFLICT(file_id) DO UPDATE SET status=excluded.status, dateDetected=excluded.dateDetected`,
-        )
-        .run({
-          file_id: s.fileId,
-          status: s.status,
-          dateDetected: s.dateDetected.toISOString(),
-        });
-    });
-    run(status, faces);
+  async saveFaceDetectionResult(
+    status: FaceDetectionStatusDTO,
+    faces: FaceDTO[],
+    newPeople: PersonDTO[],
+  ): Promise<void> {
+    const run = this.#db.transaction(
+      (s: FaceDetectionStatusDTO, fs: FaceDTO[], people: PersonDTO[]) => {
+        this.#db.prepare('DELETE FROM faces WHERE file_id = ?').run(s.fileId);
+
+        const insertPerson = this.#db.prepare(`
+          INSERT INTO people (id, name, representativeDescriptor, dateCreated)
+          VALUES (@id, @name, @representativeDescriptor, @dateCreated)
+        `);
+        for (const p of people) {
+          insertPerson.run({
+            id: p.id,
+            name: p.name,
+            representativeDescriptor: JSON.stringify(p.representativeDescriptor),
+            dateCreated: p.dateCreated.toISOString(),
+          });
+        }
+
+        const insertFace = this.#db.prepare(`
+          INSERT INTO faces (id, file_id, boundingBox, descriptor, personId, dateDetected)
+          VALUES (@id, @file_id, @boundingBox, @descriptor, @personId, @dateDetected)
+        `);
+        for (const f of fs) {
+          insertFace.run({
+            id: f.id ?? generateId(),
+            file_id: f.fileId,
+            boundingBox: JSON.stringify(f.boundingBox),
+            descriptor: JSON.stringify(f.descriptor),
+            personId: f.personId ?? null,
+            dateDetected: f.dateDetected.toISOString(),
+          });
+        }
+
+        this.#db
+          .prepare(
+            `INSERT INTO face_detection_status (file_id, status, dateDetected)
+             VALUES (@file_id, @status, @dateDetected)
+             ON CONFLICT(file_id) DO UPDATE SET status=excluded.status, dateDetected=excluded.dateDetected`,
+          )
+          .run({
+            file_id: s.fileId,
+            status: s.status,
+            dateDetected: s.dateDetected.toISOString(),
+          });
+
+        this.#db
+          .prepare(
+            'DELETE FROM people WHERE id NOT IN (SELECT DISTINCT personId FROM faces WHERE personId IS NOT NULL)',
+          )
+          .run();
+      },
+    );
+    run(status, faces, newPeople);
+    this.#notifyChange();
+  }
+
+  async fetchAllPeople(): Promise<PersonDTO[]> {
+    const rows = this.#db.prepare('SELECT * FROM people').all() as any[];
+    return rows.map(rowToPersonDTO);
+  }
+
+  async renamePerson(personId: ID, name: string): Promise<void> {
+    this.#db.prepare('UPDATE people SET name = ? WHERE id = ?').run(name, personId);
     this.#notifyChange();
   }
 
