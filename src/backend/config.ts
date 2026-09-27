@@ -182,12 +182,18 @@ const dbConfig: DBVersioningConfig[] = [
     },
   },
   {
-    // Version 14, 27-9-26: Added faces table for face detection
+    // Version 14, 27-9-26: Added faces table for face detection, plus faceDetectionStatus: one
+    // record per file detection was attempted on (0 faces and failures included), primary key fileId.
+    // (faceDetectionStatus was added to v14 in place before v14 ever shipped — no v15 migration needed.)
     version: 14,
     collections: [
       {
         name: 'faces',
         schema: '++id, fileId, personId, dateDetected',
+      },
+      {
+        name: 'faceDetectionStatus',
+        schema: 'fileId, status, dateDetected',
       },
     ],
   },
