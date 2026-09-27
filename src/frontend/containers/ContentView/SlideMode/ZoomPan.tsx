@@ -27,6 +27,7 @@ import { UpscaleMode } from '../../../stores/UiStore';
 const OVERZOOM_TOLERANCE = 0.05;
 const DOUBLE_TAP_THRESHOLD = 250;
 const ANIMATION_SPEED = 0.1;
+const PINCH_THRESHOLD = 0.02; //minimum relative change in finger distance to count as a pinch, filters out two-finger drag jitter
 
 export type SlideTransform = Transform;
 
@@ -150,6 +151,11 @@ export default class ZoomPan extends React.Component<ZoomPanProps, ZoomPanState>
   };
 
   handleMouseWheel = (event: React.WheelEvent) => {
+    // Only zoom on pinch gestures (trackpad pinch-to-zoom sends wheel events with ctrlKey=true)
+    // or an explicit ctrl/cmd+scroll. Plain two-finger scrolling should not zoom.
+    if (!event.ctrlKey) {
+      return;
+    }
     this.stopAnimation();
     const { scale } = this.state;
     const point = getRelativePosition(createVec2(event.clientX, event.clientY), this.container);
@@ -222,9 +228,14 @@ export default class ZoomPan extends React.Component<ZoomPanProps, ZoomPanState>
   pinch(position1: Vec2, position2: Vec2) {
     const length = getPinchLength(position1, position2);
     const center = getPinchMidpoint(position1, position2);
+    // Two fingers moving together (a drag/pan) still causes small fluctuations in the
+    // distance between them; ignore those so a two-finger drag doesn't jitter-zoom, and
+    // only treat it as a pinch once the distance changes by a meaningful amount.
+    const lengthRatio = this.lastPinchLength > 0 ? length / this.lastPinchLength : 1;
+    const isPinchGesture = Math.abs(lengthRatio - 1) > PINCH_THRESHOLD;
     const scale =
-      this.lastPinchLength > 0
-        ? (this.state.scale * length) / this.lastPinchLength //sometimes we get a touchchange before a touchstart when pinching
+      this.lastPinchLength > 0 && isPinchGesture
+        ? this.state.scale * lengthRatio //sometimes we get a touchchange before a touchstart when pinching
         : this.state.scale;
     this.lastPinchLength = length;
     const transform = getZoomedTransform(this.props, this.state, scale, center, OVERZOOM_TOLERANCE);
