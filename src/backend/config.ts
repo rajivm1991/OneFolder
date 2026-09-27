@@ -181,6 +181,16 @@ const dbConfig: DBVersioningConfig[] = [
         });
     },
   },
+  {
+    // Version 14, 27-9-26: Added faces table for face detection
+    version: 14,
+    collections: [
+      {
+        name: 'faces',
+        schema: '++id, fileId, personId, dateDetected',
+      },
+    ],
+  },
 ];
 
 type DBVersioningConfig = {

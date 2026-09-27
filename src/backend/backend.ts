@@ -12,6 +12,7 @@ import {
   StringConditionDTO,
 } from '../api/data-storage-search';
 import { DismissedDuplicateGroupDTO } from '../api/dismissed-duplicate-group';
+import { FaceDTO } from '../api/face';
 import { FileDTO } from '../api/file';
 import { FileSearchDTO } from '../api/file-search';
 import { ID } from '../api/id';
@@ -32,6 +33,7 @@ export default class Backend implements DataStorage {
   #searches: Table<FileSearchDTO, ID>;
   #dismissedDuplicateGroups: Table<DismissedDuplicateGroupDTO, ID>;
   #visualHashes: Table<VisualHashDTO, ID>;
+  #faces: Table<FaceDTO, ID>;
   #db: Dexie;
   #notifyChange: () => void;
 
@@ -44,6 +46,7 @@ export default class Backend implements DataStorage {
     this.#searches = db.table('searches');
     this.#dismissedDuplicateGroups = db.table('dismissedDuplicateGroups');
     this.#visualHashes = db.table('visualHashes');
+    this.#faces = db.table('faces');
     this.#db = db;
     this.#notifyChange = notifyChange;
   }
@@ -54,10 +57,12 @@ export default class Backend implements DataStorage {
       this.#files,
       this.#visualHashes,
       this.#dismissedDuplicateGroups,
+      this.#faces,
       async () => {
         await this.#files.clear();
         await this.#visualHashes.clear();
         await this.#dismissedDuplicateGroups.clear();
+        await this.#faces.clear();
       },
     );
     this.#notifyChange();
@@ -83,6 +88,29 @@ export default class Backend implements DataStorage {
   async clearVisualHashCache(): Promise<void> {
     console.info('IndexedDB: Clearing all visual hash cache...');
     await this.#visualHashes.clear();
+    this.#notifyChange();
+  }
+
+  async fetchFacesForFile(fileId: ID): Promise<FaceDTO[]> {
+    console.info('IndexedDB: Fetching faces for file', fileId, '...');
+    return this.#faces.where('fileId').equals(fileId).toArray();
+  }
+
+  async fetchFileIdsWithFaces(): Promise<Set<ID>> {
+    console.info('IndexedDB: Fetching file IDs with faces...');
+    const allFaces = await this.#faces.toArray();
+    return new Set(allFaces.map((f) => f.fileId));
+  }
+
+  async saveFaces(faces: FaceDTO[]): Promise<void> {
+    console.info('IndexedDB: Saving', faces.length, 'faces...');
+    await this.#faces.bulkPut(faces);
+    this.#notifyChange();
+  }
+
+  async removeFacesForFile(fileId: ID): Promise<void> {
+    console.info('IndexedDB: Removing faces for file', fileId, '...');
+    await this.#faces.where('fileId').equals(fileId).delete();
     this.#notifyChange();
   }
 

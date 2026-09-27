@@ -1,6 +1,7 @@
 import { IndexableType } from 'dexie';
 import { ConditionDTO, OrderBy, OrderDirection } from './data-storage-search';
 import { DismissedDuplicateGroupDTO } from './dismissed-duplicate-group';
+import { FaceDTO } from './face';
 import { FileDTO } from './file';
 import { FileSearchDTO } from './file-search';
 import { ID } from './id';
@@ -57,4 +58,10 @@ export interface DataStorage {
   saveVisualHashes(hashes: VisualHashDTO[]): Promise<void>;
   removeVisualHashes(absolutePaths: string[]): Promise<void>;
   clearVisualHashCache(): Promise<void>;
+
+  // Face Detection
+  fetchFacesForFile(fileId: ID): Promise<FaceDTO[]>;
+  fetchFileIdsWithFaces(): Promise<Set<ID>>;
+  saveFaces(faces: FaceDTO[]): Promise<void>;
+  removeFacesForFile(fileId: ID): Promise<void>;
 }
