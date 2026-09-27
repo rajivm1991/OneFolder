@@ -508,7 +508,6 @@ export const CONTAINER_DEFAULT_STYLE = {
   width: '100%',
   height: '100%',
   overflow: 'hidden',
-  margin: 'auto',
 };
 
 function imageStyle({ top, left, scale }: ZoomPanState, upscaleMode: UpscaleMode): CSSProperties {

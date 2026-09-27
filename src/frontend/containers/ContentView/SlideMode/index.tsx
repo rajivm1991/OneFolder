@@ -55,6 +55,23 @@ const SlideView = observer(({ width, height }: SlideViewProps) => {
   const isFirst = useComputed(() => uiStore.firstItem === 0);
   const isLast = useComputed(() => uiStore.firstItem === fileStore.fileList.length - 1);
 
+  // #zoomable-image fills its flex-grown space via CSS (height: 100%), which can differ from
+  // `height` (derived from #gallery-content, a sibling that sits below the toolbar). Measure the
+  // container's own rendered size so the image is centered against its real dimensions.
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [measuredHeight, setMeasuredHeight] = useState(height);
+  useEffect(() => {
+    const element = containerRef.current;
+    if (!element) {
+      return;
+    }
+    const observer = new ResizeObserver((entries) => {
+      setMeasuredHeight(entries[0].contentRect.height);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
   // Go to the first selected image on load
   useEffect(() => {
     return reaction(
@@ -179,8 +196,9 @@ const SlideView = observer(({ width, height }: SlideViewProps) => {
 
   return (
     <div
+      ref={containerRef}
       id="zoomable-image"
-      style={{ width, height }}
+      style={{ width, height: '100%' }}
       onContextMenu={eventManager?.showSlideContextMenu}
       onDrop={eventManager?.drop}
       tabIndex={-1}
@@ -207,7 +225,7 @@ const SlideView = observer(({ width, height }: SlideViewProps) => {
           file={file}
           thumbnailSrc={file.thumbnailPath}
           width={width}
-          height={height}
+          height={measuredHeight}
           transitionStart={transitionStart}
           transitionEnd={uiStore.isSlideMode ? undefined : transitionStart}
           onClose={uiStore.disableSlideMode}
