@@ -167,8 +167,8 @@ class UiStore {
   @observable isPreviewOpen: boolean = false;
   @observable isAdvancedSearchOpen: boolean = false;
   @observable searchMatchAny = false;
-  @observable method: ViewMethod = ViewMethod.Grid;
-  @observable lastMasonryMethod: ViewMethod = ViewMethod.Grid;
+  @observable method: ViewMethod = ViewMethod.MasonryHorizontal;
+  @observable lastMasonryMethod: ViewMethod = ViewMethod.MasonryHorizontal;
   @observable isSlideMode: boolean = false;
   @observable isFullScreen: boolean = false;
   @observable outlinerWidth: number = UiStore.MIN_OUTLINER_WIDTH;
@@ -194,7 +194,7 @@ class UiStore {
   /** Index of the first item in the viewport. Also acts as the current item shown in slide mode */
   // TODO: Might be better to store the ID to the file. I believe we were storing the index for performance, but we have instant conversion between index/ID now
   @observable firstItem: number = 0;
-  @observable thumbnailSize: ThumbnailSize | number = 'medium';
+  @observable thumbnailSize: ThumbnailSize | number = 'small';
   @observable thumbnailShape: ThumbnailShape = 'square';
   @observable upscaleMode: UpscaleMode = 'smooth';
   @observable galleryVideoPlaybackMode: GalleryVideoPlaybackMode = 'hover';
