@@ -88,6 +88,22 @@ export function initSqliteSchema(db: Database.Database): void {
       dateComputed TEXT NOT NULL,
       thumbnailPath TEXT
     );
+
+    CREATE TABLE IF NOT EXISTS faces (
+      id TEXT PRIMARY KEY,
+      file_id TEXT NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+      boundingBox TEXT NOT NULL,
+      descriptor TEXT NOT NULL,
+      personId TEXT,
+      dateDetected TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_faces_file_id ON faces(file_id);
+
+    CREATE TABLE IF NOT EXISTS face_detection_status (
+      file_id TEXT PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+      status TEXT NOT NULL,
+      dateDetected TEXT NOT NULL
+    );
   `);
 
   // CREATE TABLE IF NOT EXISTS never adds columns to an existing table, so context files created

@@ -4,6 +4,7 @@ import fs from 'fs';
 import { shuffleArray } from '../../common/core';
 import { ConditionDTO, OrderBy, OrderDirection } from '../api/data-storage-search';
 import { DismissedDuplicateGroupDTO } from '../api/dismissed-duplicate-group';
+import { FaceDetectionStatusDTO, FaceDTO } from '../api/face';
 import { FileDTO } from '../api/file';
 import { generateId, ID } from '../api/id';
 import { LocationDTO } from '../api/location';
@@ -42,6 +43,17 @@ function gpsParams(file: FileDTO) {
     lng: file.lng ?? null,
     latChecked: file.lat === undefined ? 0 : 1,
     lngChecked: file.lng === undefined ? 0 : 1,
+  };
+}
+
+function rowToFaceDTO(row: any): FaceDTO {
+  return {
+    id: row.id,
+    fileId: row.file_id,
+    boundingBox: JSON.parse(row.boundingBox),
+    descriptor: JSON.parse(row.descriptor),
+    personId: row.personId ?? null,
+    dateDetected: new Date(row.dateDetected),
   };
 }
 
@@ -515,6 +527,70 @@ export class SqliteBackend implements DataStorage {
 
   async clearVisualHashCache(): Promise<void> {
     this.#db.prepare('DELETE FROM visual_hashes').run();
+    this.#notifyChange();
+  }
+
+  async fetchFacesForFile(fileId: ID): Promise<FaceDTO[]> {
+    const rows = this.#db.prepare('SELECT * FROM faces WHERE file_id = ?').all(fileId) as any[];
+    return rows.map(rowToFaceDTO);
+  }
+
+  async fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]> {
+    if (fileIds.length === 0) {
+      return [];
+    }
+    const placeholders = fileIds.map(() => '?').join(',');
+    const rows = this.#db
+      .prepare(`SELECT * FROM faces WHERE file_id IN (${placeholders})`)
+      .all(...fileIds) as any[];
+    return rows.map(rowToFaceDTO);
+  }
+
+  async fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]> {
+    if (fileIds.length === 0) {
+      return [];
+    }
+    const placeholders = fileIds.map(() => '?').join(',');
+    const rows = this.#db
+      .prepare(`SELECT * FROM face_detection_status WHERE file_id IN (${placeholders})`)
+      .all(...fileIds) as any[];
+    return rows.map((r) => ({
+      fileId: r.file_id,
+      status: r.status,
+      dateDetected: new Date(r.dateDetected),
+    }));
+  }
+
+  async saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void> {
+    const run = this.#db.transaction((s: FaceDetectionStatusDTO, fs: FaceDTO[]) => {
+      this.#db.prepare('DELETE FROM faces WHERE file_id = ?').run(s.fileId);
+      const insert = this.#db.prepare(`
+        INSERT INTO faces (id, file_id, boundingBox, descriptor, personId, dateDetected)
+        VALUES (@id, @file_id, @boundingBox, @descriptor, @personId, @dateDetected)
+      `);
+      for (const f of fs) {
+        insert.run({
+          id: f.id ?? generateId(),
+          file_id: f.fileId,
+          boundingBox: JSON.stringify(f.boundingBox),
+          descriptor: JSON.stringify(f.descriptor),
+          personId: f.personId ?? null,
+          dateDetected: f.dateDetected.toISOString(),
+        });
+      }
+      this.#db
+        .prepare(
+          `INSERT INTO face_detection_status (file_id, status, dateDetected)
+           VALUES (@file_id, @status, @dateDetected)
+           ON CONFLICT(file_id) DO UPDATE SET status=excluded.status, dateDetected=excluded.dateDetected`,
+        )
+        .run({
+          file_id: s.fileId,
+          status: s.status,
+          dateDetected: s.dateDetected.toISOString(),
+        });
+    });
+    run(status, faces);
     this.#notifyChange();
   }
 
