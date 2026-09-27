@@ -91,6 +91,13 @@ class LocationStore {
     this.backend.saveLocation(loc);
   }
 
+  /** Fire-and-forget: hands files to the face detection queue, which skips already-detected ones */
+  private enqueueFaceDetection(files: FileDTO[]): void {
+    this.rootStore.faceDetectionStore
+      .enqueueFiles(files)
+      .catch((err) => console.error('Face detection failed', err));
+  }
+
   // E.g. in preview window, it's not needed to watch the locations
   // Returns whether files have been added, changed or removed
   @action async watchLocations(): Promise<boolean> {
@@ -118,6 +125,9 @@ class LocationStore {
     // Files confirmed missing (no rename/move match found) across all locations,
     // offered to the user for one-click removal from the library
     const confirmedMissingIds: ID[] = [];
+
+    // Paths of all files currently present on disk in reachable locations (for face detection below)
+    const pathsOnDisk = new Set<string>();
 
     // For every location, find created/moved/deleted files, and update the database accordingly.
     // TODO: Do this in a web worker, not in the renderer thread!
@@ -169,6 +179,9 @@ class LocationStore {
         );
         continue;
       }
+      for (const diskFile of diskFiles) {
+        pathsOnDisk.add(diskFile.absolutePath);
+      }
 
       console.log('Finding created files...');
       // Find all files that have been created (those on disk but not in DB)
@@ -177,12 +190,6 @@ class LocationStore {
         createdPaths.map((path) => () => pathToIFile(path, location, this.rootStore.imageLoader)),
         50, // Matches the concurrency limit already used for the similar bulk case in initLocation (below)
       );
-
-      this.rootStore.faceDetectionStore
-        .runDetectionBatch(
-          createdFiles.map((f) => ({ id: f.id, absolutePath: f.absolutePath, dateModified: f.dateModified })),
-        )
-        .catch((err) => console.error('Face detection batch failed', err));
 
       // Find all files of this location that have been removed (those in DB but not on disk anymore)
       const missingFiles = dbFiles.filter(
@@ -315,18 +322,21 @@ class LocationStore {
       if (updatedFiles.length > 0) {
         console.debug('Re-indexed files changed on disk', updatedFiles);
         await this.backend.saveFiles(updatedFiles);
-
-        this.rootStore.faceDetectionStore
-          .runDetectionBatch(
-            updatedFiles.map((f) => ({ id: f.id, absolutePath: f.absolutePath, dateModified: f.dateModified })),
-          )
-          .catch((err) => console.error('Face detection batch failed', err));
       }
 
       console.groupEnd();
 
       foundNewFiles = foundNewFiles || newFiles.length > 0;
     }
+
+    // Face detection over the WHOLE library, once per session, now that the DB reflects the disk.
+    // This is what picks up the pre-existing backlog, resumes a scan interrupted in an earlier
+    // session, and covers created/renamed/changed files (with their final DB ids): the store's own
+    // status check skips everything already detected and not re-indexed since. Files whose
+    // location is unreachable or that are missing from disk are left out, so they aren't recorded
+    // as failed while temporarily unavailable.
+    const libraryFiles = await this.backend.fetchFiles('id', OrderDirection.Asc);
+    this.enqueueFaceDetection(libraryFiles.filter((f) => pathsOnDisk.has(f.absolutePath)));
 
     if (foundNewFiles) {
       AppToaster.show({ message: 'New images detected.', timeout: 5000 }, progressToastKey);
@@ -487,12 +497,12 @@ class LocationStore {
       () => isCancelled,
     );
 
-    this.rootStore.faceDetectionStore
-      .runDetectionBatch(files.map((f) => ({ id: f.id, absolutePath: f.absolutePath, dateModified: f.dateModified })))
-      .catch((err) => console.error('Face detection batch failed', err));
-
     AppToaster.show({ message: 'Updating database...', timeout: 0 }, toastKey);
     await this.backend.createFilesFromPath(location.path, files);
+
+    // Enqueue from the DB (not `files`): createFilesFromPath skips paths already in the DB, so
+    // only the stored records carry the authoritative file ids.
+    this.enqueueFaceDetection(await this.findLocationFiles(location.id));
 
     AppToaster.show({ message: `Location "${location.name}" is ready!`, timeout: 5000 }, toastKey);
     await this.rootStore.fileStore.refetch();
@@ -553,6 +563,9 @@ class LocationStore {
       this.rootStore.fileStore.save(newIFile);
     } else {
       await this.backend.createFilesFromPath(fileStats.absolutePath, [file]);
+      this.enqueueFaceDetection(
+        await this.backend.fetchFilesByKey('absolutePath', fileStats.absolutePath),
+      );
 
       AppToaster.show({ message: 'New images have been detected.', timeout: 5000 }, 'new-images');
       // might be called a lot when moving many images into a folder, so debounce it

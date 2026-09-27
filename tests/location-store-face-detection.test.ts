@@ -1,18 +1,25 @@
+import { FileDTO } from '../src/api/file';
 import { FaceDetectionStore } from '../src/frontend/stores/FaceDetectionStore';
 
 describe('LocationStore + FaceDetectionStore integration contract', () => {
-  it('runDetectionBatch is callable with the shape LocationStore produces from discovered files', async () => {
+  it('enqueueFiles accepts the FileDTOs LocationStore fetches from the DB', async () => {
     const dataStorage = {
-      fetchFileIdsWithFaces: async () => new Set<string>(),
-      fetchFacesForFile: async () => [],
-      saveFaces: async () => {},
-      removeFacesForFile: async () => {},
+      fetchFacesForFiles: async () => [],
+      fetchFaceDetectionStatuses: async () => [],
+      saveFaceDetectionResult: async () => {},
     };
-    const detectForFile = async () => [];
-    const store = new FaceDetectionStore(dataStorage as any, detectForFile);
+    const detectForFile = jest.fn(async () => []);
+    const store = new FaceDetectionStore(dataStorage, detectForFile);
 
-    const discoveredFiles = [{ id: 'f1', absolutePath: '/x.jpg', dateModified: new Date() }];
-    await expect(store.runDetectionBatch(discoveredFiles)).resolves.toBeUndefined();
+    const dbFile = {
+      id: 'f1',
+      absolutePath: '/x.jpg',
+      dateLastIndexed: new Date(),
+      dateModified: new Date(),
+      name: 'x.jpg',
+    } as FileDTO;
+    await expect(store.enqueueFiles([dbFile])).resolves.toBeUndefined();
+    expect(detectForFile).toHaveBeenCalledWith('/x.jpg');
     expect(store.processedCount).toBe(1);
   });
 });
