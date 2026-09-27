@@ -20,7 +20,8 @@ function createFakeStorage(initialStatuses: FaceDetectionStatusDTO[] = []) {
     fetchFacesForFiles: async (ids: string[]) => faces.filter((f) => ids.includes(f.fileId)),
     fetchFaceDetectionStatuses: async (ids: string[]) =>
       ids.map((id) => statuses.get(id)).filter((s): s is FaceDetectionStatusDTO => !!s),
-    fetchAllPeople: async () => people,
+    // A fresh copy, like a real backend: the store's cache must never alias the stored rows
+    fetchAllPeople: async () => people.map((p) => ({ ...p })),
     renamePerson: async (personId: string, name: string) => {
       const person = people.find((p) => p.id === personId);
       if (person !== undefined) {
@@ -38,7 +39,12 @@ function createFakeStorage(initialStatuses: FaceDetectionStatusDTO[] = []) {
         }
       }
       faces.push(...newFaces);
-      people.push(...newPeople);
+      // Mirrors the real backends: insert only people that don't have a row yet
+      for (const p of newPeople) {
+        if (!people.some((existing) => existing.id === p.id)) {
+          people.push(p);
+        }
+      }
       statuses.set(status.fileId, status);
     },
   };
@@ -335,7 +341,9 @@ describe('FaceDetectionStore', () => {
 
     await store.enqueueFiles([{ id: 'f1', absolutePath: '/a.jpg', dateLastIndexed: new Date() }]);
 
-    expect(savedPeople).toHaveLength(0); // no new person created
+    // No new person created: the only person sent along is the existing one the face references
+    // (re-sent on purpose so the backend can recreate it if it was pruned meanwhile).
+    expect(savedPeople.map((p) => p.id)).toEqual(['person-existing']);
     expect(savedFaces[0].personId).toBe('person-existing');
   });
 
@@ -368,7 +376,8 @@ describe('FaceDetectionStore', () => {
       { id: 'f2', absolutePath: '/b.jpg', dateLastIndexed: new Date() },
     ]);
 
-    expect(savedPeople).toHaveLength(1); // exactly one person created, not two
+    // Exactly one person created, not two (each file's save references it, so it's sent twice)
+    expect(new Set(savedPeople.map((p) => p.id)).size).toBe(1);
     expect(new Set(savedFaces.map((f) => f.personId)).size).toBe(1);
   });
 
@@ -414,7 +423,8 @@ describe('FaceDetectionStore', () => {
     ]);
 
     expect(fetchAllPeopleCallCount).toBe(1); // all 3 concurrent runners shared one fetch
-    expect(savedPeople).toHaveLength(1); // exactly one person created, not up to 3
+    // Exactly one person created, not up to 3 (each file's save references it)
+    expect(new Set(savedPeople.map((p) => p.id)).size).toBe(1);
     expect(new Set(savedFaces.map((f) => f.personId)).size).toBe(1);
   });
 
@@ -469,5 +479,51 @@ describe('FaceDetectionStore', () => {
     expect(savedPeople).toHaveLength(1);
     expect(savedFaces).toHaveLength(1);
     expect(savedFaces[0].personId).toBe(savedPeople[0].id);
+  });
+
+  it('re-sends a cached person the backend has since pruned, so the save recreates it instead of orphaning the face', async () => {
+    const storage = createFakeStorage();
+    const descriptor = new Array(128).fill(0.5);
+    const store = new FaceDetectionStore(storage, async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor },
+    ]);
+    await store.enqueueFiles([file('a')]);
+    expect(storage.people).toHaveLength(1);
+    const personId = storage.people[0].id;
+
+    // The backend prunes the person on its own (e.g. file 'a' was removed); the store's cache
+    // still holds them.
+    storage.faces.splice(0);
+    storage.people.splice(0);
+
+    await store.enqueueFiles([file('b')]);
+    expect(storage.faces).toHaveLength(1);
+    expect(storage.faces[0].personId).toBe(personId);
+    expect(storage.people.map((p) => p.id)).toEqual([personId]);
+  });
+
+  it('a person created for a file whose save failed is still persisted by the next matching face', async () => {
+    const storage = createFakeStorage();
+    const save = storage.saveFaceDetectionResult;
+    storage.saveFaceDetectionResult = async (status, faces, people) => {
+      if (status.fileId === 'a') {
+        throw new Error('transient DB error');
+      }
+      return save(status, faces, people);
+    };
+    const descriptor = new Array(128).fill(0.6);
+    const store = new FaceDetectionStore(storage, async () => [
+      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor },
+    ]);
+
+    // 'a' creates a new person in the cache, then its save throws: nothing reaches storage.
+    await store.enqueueFiles([file('a')]);
+    expect(storage.people).toHaveLength(0);
+
+    // 'b' matches that cached-but-never-saved person; its save must create the person row too.
+    await store.enqueueFiles([file('b')]);
+    expect(storage.faces).toHaveLength(1);
+    expect(storage.people).toHaveLength(1);
+    expect(storage.faces[0].personId).toBe(storage.people[0].id);
   });
 });

@@ -121,7 +121,7 @@ export default class Backend implements DataStorage {
   async saveFaceDetectionResult(
     status: FaceDetectionStatusDTO,
     faces: FaceDTO[],
-    newPeople: PersonDTO[],
+    people: PersonDTO[],
   ): Promise<void> {
     await this.#db.transaction(
       'rw',
@@ -131,8 +131,17 @@ export default class Backend implements DataStorage {
       async () => {
         // Clear the file's previous faces first: on re-detection of a changed file they're stale
         await this.#faces.where('fileId').equals(status.fileId).delete();
-        if (newPeople.length > 0) {
-          await this.#people.bulkAdd(newPeople);
+        // Insert only the referenced people that have no row (new, or pruned since the caller
+        // cached them) — the Dexie equivalent of SQLite's ON CONFLICT DO NOTHING. Not bulkPut: that
+        // would overwrite existing rows with the caller's copy, which could revert a rename that
+        // landed after the caller read the person.
+        const uniquePeople = Array.from(new Map(people.map((p) => [p.id, p])).values());
+        if (uniquePeople.length > 0) {
+          const existing = await this.#people.bulkGet(uniquePeople.map((p) => p.id));
+          const missing = uniquePeople.filter((_, i) => existing[i] === undefined);
+          if (missing.length > 0) {
+            await this.#people.bulkAdd(missing);
+          }
         }
         if (faces.length > 0) {
           await this.#faces.bulkAdd(faces);

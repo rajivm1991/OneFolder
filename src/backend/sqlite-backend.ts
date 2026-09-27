@@ -587,17 +587,20 @@ export class SqliteBackend implements DataStorage {
   async saveFaceDetectionResult(
     status: FaceDetectionStatusDTO,
     faces: FaceDTO[],
-    newPeople: PersonDTO[],
+    people: PersonDTO[],
   ): Promise<void> {
     const run = this.#db.transaction(
-      (s: FaceDetectionStatusDTO, fs: FaceDTO[], people: PersonDTO[]) => {
+      (s: FaceDetectionStatusDTO, fs: FaceDTO[], ps: PersonDTO[]) => {
         this.#db.prepare('DELETE FROM faces WHERE file_id = ?').run(s.fileId);
 
+        // Insert only the referenced people that have no row (new, or pruned since the caller
+        // cached them); an existing row is left as-is, so a rename is never reverted.
         const insertPerson = this.#db.prepare(`
           INSERT INTO people (id, name, representativeDescriptor, dateCreated)
           VALUES (@id, @name, @representativeDescriptor, @dateCreated)
+          ON CONFLICT(id) DO NOTHING
         `);
-        for (const p of people) {
+        for (const p of ps) {
           insertPerson.run({
             id: p.id,
             name: p.name,
@@ -640,7 +643,7 @@ export class SqliteBackend implements DataStorage {
           .run();
       },
     );
-    run(status, faces, newPeople);
+    run(status, faces, people);
     this.#notifyChange();
   }
 

@@ -69,13 +69,17 @@ export interface DataStorage {
   /**
    * Atomically records the outcome of one detection attempt for `status.fileId`: removes that
    * file's previous (possibly stale) faces, stores `faces` (may be empty) with their `personId`s
-   * already assigned, creates any `newPeople` those faces were just clustered into, upserts
-   * `status`, and prunes any person left with zero faces as a result of the old faces' removal.
+   * already assigned, inserts whichever of `people` (every person those faces reference, new or
+   * not) doesn't have a row yet — existing rows are left untouched, so a rename is never
+   * clobbered — upserts `status`, and prunes any person left with zero faces as a result of the
+   * old faces' removal. Passing already-existing people is what makes the write self-healing: a
+   * person pruned elsewhere (e.g. their only photo was removed) while the caller still had them
+   * cached is recreated by the next face that matches them, instead of that face being orphaned.
    */
   saveFaceDetectionResult(
     status: FaceDetectionStatusDTO,
     faces: FaceDTO[],
-    newPeople: PersonDTO[],
+    people: PersonDTO[],
   ): Promise<void>;
   // Note: faces + detection statuses of removed files are cleaned up by removeFiles/removeLocation,
   // which also prune any person left with zero faces as a result.

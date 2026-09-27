@@ -22,7 +22,7 @@ interface FaceDetectionDataStorage {
   saveFaceDetectionResult(
     status: FaceDetectionStatusDTO,
     faces: FaceDTO[],
-    newPeople: PersonDTO[],
+    people: PersonDTO[],
   ): Promise<void>;
 }
 
@@ -182,7 +182,7 @@ export class FaceDetectionStore {
    * the resolved value) so concurrent runners don't each populate their own independent cache
    * snapshot — see its doc comment for that half of the fix.
    */
-  private assignPerson(descriptor: number[]): { personId: ID; newPerson: PersonDTO | undefined } {
+  private assignPerson(descriptor: number[]): PersonDTO {
     const cache = this.peopleCache;
     if (cache === undefined) {
       throw new Error('assignPerson called before ensurePeopleCacheLoaded');
@@ -195,7 +195,7 @@ export class FaceDetectionStore {
       }
     }
     if (best !== undefined && best.distance < PERSON_MATCH_THRESHOLD) {
-      return { personId: best.person.id, newPerson: undefined };
+      return best.person;
     }
     const newPerson: PersonDTO = {
       id: generateId(),
@@ -204,7 +204,7 @@ export class FaceDetectionStore {
       dateCreated: new Date(),
     };
     cache.push(newPerson); // synchronous — visible to the next assignPerson call immediately
-    return { personId: newPerson.id, newPerson };
+    return newPerson;
   }
 
   private takeNext(): FileForDetection | undefined {
@@ -274,25 +274,30 @@ export class FaceDetectionStore {
 
     try {
       await this.ensurePeopleCacheLoaded();
-      const newPeople: PersonDTO[] = [];
+      // EVERY person the faces reference, not just the ones created just now: the backend
+      // inserts whichever of them it no longer has (and leaves existing rows untouched). The cache
+      // is never refreshed mid-session, so it can hold people the backend has since pruned
+      // (their last photo removed/re-detected elsewhere), or a person created for an earlier file
+      // whose save then failed. Re-sending them makes each save self-healing — the person row is
+      // recreated alongside the face that references it — instead of the face silently pointing
+      // at a person that doesn't exist (invisible in the People view, never re-clustered).
+      const referencedPeople = new Map<ID, PersonDTO>();
       const faceDTOs: FaceDTO[] = faces.map((f) => {
-        const { personId, newPerson } = this.assignPerson(f.descriptor);
-        if (newPerson !== undefined) {
-          newPeople.push(newPerson);
-        }
+        const person = this.assignPerson(f.descriptor);
+        referencedPeople.set(person.id, person);
         return {
           id: generateId(),
           fileId: file.id,
           boundingBox: f.boundingBox,
           descriptor: f.descriptor,
-          personId,
+          personId: person.id,
           dateDetected: startedAt,
         };
       });
       await this.dataStorage.saveFaceDetectionResult(
         { fileId: file.id, status, dateDetected: startedAt },
         faceDTOs,
-        newPeople,
+        Array.from(referencedPeople.values()),
       );
     } catch (err) {
       // e.g. the file was removed from the DB meanwhile; don't let it stall the queue

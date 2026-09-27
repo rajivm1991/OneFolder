@@ -5,6 +5,7 @@ import { FaceDetectionStatusDTO, FaceDTO } from '../src/api/face';
 import { FileDTO } from '../src/api/file';
 import { PersonDTO } from '../src/api/person';
 import { SqliteBackend } from '../src/backend/sqlite-backend';
+import { FaceDetectionStore } from '../src/frontend/stores/FaceDetectionStore';
 
 describe('SqliteBackend people / face clustering API', () => {
   let tmpDir: string;
@@ -164,5 +165,116 @@ describe('SqliteBackend people / face clustering API', () => {
 
     await backend.removeFiles(['file-1']);
     expect(await backend.fetchAllPeople()).toHaveLength(0);
+  });
+
+  test('saveFaceDetectionResult recreates a referenced person that has no row (e.g. pruned meanwhile)', async (backend) => {
+    await backend.createFilesFromPath('/root', [mockFile({ id: 'file-2' })]);
+    const person = mockPerson({ id: 'person-pruned', name: 'Mom' });
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'file-2' }),
+      [mockFace({ id: 'face-2', fileId: 'file-2', personId: person.id })],
+      [person],
+    );
+    expect(await backend.fetchAllPeople()).toEqual([person]);
+    expect((await backend.fetchFacesForFile('file-2'))[0].personId).toBe(person.id);
+  });
+
+  test('saveFaceDetectionResult leaves an existing person row untouched (no rename reverted, no duplicate)', async (backend) => {
+    await backend.createFilesFromPath('/root', [
+      mockFile({ id: 'file-1' }),
+      mockFile({ id: 'file-2' }),
+    ]);
+    const person = mockPerson();
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'file-1' }),
+      [mockFace({ id: 'face-1', fileId: 'file-1', personId: person.id })],
+      [person],
+    );
+    await backend.renamePerson(person.id, 'Mom');
+    // A stale copy (still named '') is passed again, twice in the same call.
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'file-2' }),
+      [
+        mockFace({ id: 'face-2', fileId: 'file-2', personId: person.id }),
+        mockFace({ id: 'face-3', fileId: 'file-2', personId: person.id }),
+      ],
+      [person, person],
+    );
+    const people = await backend.fetchAllPeople();
+    expect(people).toHaveLength(1);
+    expect(people[0].name).toBe('Mom');
+  });
+
+  /** End-to-end with the REAL store + REAL SQLite backend: the store's in-memory people cache is
+   * never refreshed, so it can reference people the backend has pruned (or never saved). */
+  const box = { x: 0.1, y: 0.1, width: 0.2, height: 0.2 };
+  const descriptorA = new Array(128).fill(0.1);
+  const descriptorANearby = [0.15, ...new Array(127).fill(0.1)]; // distance 0.05 < 0.6
+  const detect = async (absolutePath: string) => [
+    { boundingBox: box, descriptor: absolutePath.includes('file-1') ? descriptorA : descriptorANearby },
+  ];
+  const forDetection = (id: string) => ({
+    id,
+    absolutePath: `/root/${id}.jpg`,
+    dateLastIndexed: new Date(),
+  });
+
+  test('store + backend: a person pruned by removeFiles is recreated when a new face matches them', async (backend) => {
+    await backend.createFilesFromPath('/root', [
+      mockFile({ id: 'file-1' }),
+      mockFile({ id: 'file-2' }),
+    ]);
+    const store = new FaceDetectionStore(backend, detect);
+
+    await store.enqueueFiles([forDetection('file-1')]);
+    const [person] = await backend.fetchAllPeople();
+    expect(person).toBeDefined();
+    await store.renamePerson(person.id, 'Mom');
+
+    // Their only photo is removed: the backend prunes them, but the store's cache still has them.
+    await backend.removeFiles(['file-1']);
+    expect(await backend.fetchAllPeople()).toHaveLength(0);
+
+    await store.enqueueFiles([forDetection('file-2')]);
+    const faces = await backend.fetchFacesForFile('file-2');
+    expect(faces).toHaveLength(1);
+    expect(faces[0].personId).toBe(person.id);
+    // The person row exists again (same id, name kept), so the face is visible in the People view.
+    const people = await backend.fetchAllPeople();
+    expect(people.map((p) => [p.id, p.name])).toEqual([[person.id, 'Mom']]);
+  });
+
+  test('store + backend: a person first created for a file whose save failed is persisted by a later match', async (backend) => {
+    await backend.createFilesFromPath('/root', [
+      mockFile({ id: 'file-1' }),
+      mockFile({ id: 'file-2' }),
+    ]);
+    const storage = {
+      fetchFacesForFiles: (ids: string[]) => backend.fetchFacesForFiles(ids),
+      fetchFaceDetectionStatuses: (ids: string[]) => backend.fetchFaceDetectionStatuses(ids),
+      fetchAllPeople: () => backend.fetchAllPeople(),
+      renamePerson: (id: string, name: string) => backend.renamePerson(id, name),
+      saveFaceDetectionResult: async (
+        status: FaceDetectionStatusDTO,
+        faces: FaceDTO[],
+        people: PersonDTO[],
+      ) => {
+        if (status.fileId === 'file-1') {
+          throw new Error('transient DB error');
+        }
+        return backend.saveFaceDetectionResult(status, faces, people);
+      },
+    };
+    const store = new FaceDetectionStore(storage, detect);
+
+    await store.enqueueFiles([forDetection('file-1')]); // person created in cache, save throws
+    expect(await backend.fetchAllPeople()).toHaveLength(0);
+
+    await store.enqueueFiles([forDetection('file-2')]);
+    const faces = await backend.fetchFacesForFile('file-2');
+    const people = await backend.fetchAllPeople();
+    expect(faces).toHaveLength(1);
+    expect(people).toHaveLength(1);
+    expect(faces[0].personId).toBe(people[0].id);
   });
 });
