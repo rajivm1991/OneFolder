@@ -2,6 +2,7 @@ import { makeObservable, observable, runInAction } from 'mobx';
 import { FaceDetectionStatusDTO, FaceDTO, NormalizedBox } from '../../api/face';
 import { FileDTO } from '../../api/file';
 import { generateId, ID } from '../../api/id';
+import { PersonDTO } from '../../api/person';
 
 /** `dateLastIndexed` (not `dateModified`!) is the content-change signal: LocationStore bumps it
  * when a file changed on disk, while FileDTO.dateModified means "edited in OneFolder" (e.g. tags)
@@ -16,7 +17,11 @@ interface DetectedFace {
 interface FaceDetectionDataStorage {
   fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]>;
   fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]>;
-  saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void>;
+  saveFaceDetectionResult(
+    status: FaceDetectionStatusDTO,
+    faces: FaceDTO[],
+    newPeople: PersonDTO[],
+  ): Promise<void>;
 }
 
 const CONCURRENCY = 3;
@@ -185,6 +190,8 @@ export class FaceDetectionStore {
           personId: null,
           dateDetected: startedAt,
         })),
+        // TODO(Task 3): cluster detected faces into people and pass any newly created ones here.
+        [],
       );
     } catch (err) {
       // e.g. the file was removed from the DB meanwhile; don't let it stall the queue

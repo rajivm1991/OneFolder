@@ -197,6 +197,16 @@ const dbConfig: DBVersioningConfig[] = [
       },
     ],
   },
+  {
+    // Version 15, 27-9-26: Added people table for face clustering (Person = a cluster of faces).
+    version: 15,
+    collections: [
+      {
+        name: 'people',
+        schema: '++id, name, dateCreated',
+      },
+    ],
+  },
 ];
 
 type DBVersioningConfig = {

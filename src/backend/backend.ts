@@ -17,6 +17,7 @@ import { FileDTO } from '../api/file';
 import { FileSearchDTO } from '../api/file-search';
 import { ID } from '../api/id';
 import { LocationDTO } from '../api/location';
+import { PersonDTO } from '../api/person';
 import { ROOT_TAG_ID, TagDTO } from '../api/tag';
 import { VisualHashDTO } from '../api/visual-hash';
 
@@ -35,6 +36,7 @@ export default class Backend implements DataStorage {
   #visualHashes: Table<VisualHashDTO, ID>;
   #faces: Table<FaceDTO, ID>;
   #faceDetectionStatus: Table<FaceDetectionStatusDTO, ID>;
+  #people: Table<PersonDTO, ID>;
   #db: Dexie;
   #notifyChange: () => void;
 
@@ -49,6 +51,7 @@ export default class Backend implements DataStorage {
     this.#visualHashes = db.table('visualHashes');
     this.#faces = db.table('faces');
     this.#faceDetectionStatus = db.table('faceDetectionStatus');
+    this.#people = db.table('people');
     this.#db = db;
     this.#notifyChange = notifyChange;
   }
@@ -56,17 +59,21 @@ export default class Backend implements DataStorage {
     console.info('IndexedDB: Clearing files only (preserving locations, tags, searches)...');
     await this.#db.transaction(
       'rw',
-      this.#files,
-      this.#visualHashes,
-      this.#dismissedDuplicateGroups,
-      this.#faces,
-      this.#faceDetectionStatus,
+      [
+        this.#files,
+        this.#visualHashes,
+        this.#dismissedDuplicateGroups,
+        this.#faces,
+        this.#faceDetectionStatus,
+        this.#people,
+      ],
       async () => {
         await this.#files.clear();
         await this.#visualHashes.clear();
         await this.#dismissedDuplicateGroups.clear();
         await this.#faces.clear();
         await this.#faceDetectionStatus.clear();
+        await this.#people.clear();
       },
     );
     this.#notifyChange();
@@ -111,16 +118,57 @@ export default class Backend implements DataStorage {
     return statuses.filter((s): s is FaceDetectionStatusDTO => s !== undefined);
   }
 
-  async saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void> {
-    await this.#db.transaction('rw', this.#faces, this.#faceDetectionStatus, async () => {
-      // Clear the file's previous faces first: on re-detection of a changed file they're stale
-      await this.#faces.where('fileId').equals(status.fileId).delete();
-      if (faces.length > 0) {
-        await this.#faces.bulkAdd(faces);
-      }
-      await this.#faceDetectionStatus.put(status);
-    });
+  async saveFaceDetectionResult(
+    status: FaceDetectionStatusDTO,
+    faces: FaceDTO[],
+    newPeople: PersonDTO[],
+  ): Promise<void> {
+    await this.#db.transaction(
+      'rw',
+      this.#faces,
+      this.#faceDetectionStatus,
+      this.#people,
+      async () => {
+        // Clear the file's previous faces first: on re-detection of a changed file they're stale
+        await this.#faces.where('fileId').equals(status.fileId).delete();
+        if (newPeople.length > 0) {
+          await this.#people.bulkAdd(newPeople);
+        }
+        if (faces.length > 0) {
+          await this.#faces.bulkAdd(faces);
+        }
+        await this.#faceDetectionStatus.put(status);
+        await this.#prunePeopleWithNoFaces();
+      },
+    );
     this.#notifyChange();
+  }
+
+  async fetchAllPeople(): Promise<PersonDTO[]> {
+    console.info('IndexedDB: Fetching all people...');
+    return this.#people.toArray();
+  }
+
+  async renamePerson(personId: ID, name: string): Promise<void> {
+    console.info('IndexedDB: Renaming person', personId, 'to', name);
+    await this.#people.update(personId, { name });
+    this.#notifyChange();
+  }
+
+  /** Deletes any person with no remaining faces. Must be called inside a transaction that
+   * includes #faces and #people (the caller is responsible for the transaction boundary). */
+  async #prunePeopleWithNoFaces(): Promise<void> {
+    const referencedIds = new Set<ID>();
+    await this.#faces.each((f) => {
+      if (f.personId !== null) {
+        referencedIds.add(f.personId);
+      }
+    });
+    const allPeople = await this.#people.toArray();
+    const toDelete = allPeople.filter((p) => !referencedIds.has(p.id)).map((p) => p.id);
+    if (toDelete.length > 0) {
+      await this.#people.bulkDelete(toDelete);
+    }
   }
 
   /** Must be called inside a transaction that includes #faces and #faceDetectionStatus */
@@ -335,9 +383,11 @@ export default class Backend implements DataStorage {
       this.#files,
       this.#faces,
       this.#faceDetectionStatus,
+      this.#people,
       async () => {
         await this.#files.bulkDelete(files);
         await this.#removeFaceDataForFiles(files);
+        await this.#prunePeopleWithNoFaces();
       },
     );
     this.#notifyChange();
@@ -351,10 +401,12 @@ export default class Backend implements DataStorage {
       this.#locations,
       this.#faces,
       this.#faceDetectionStatus,
+      this.#people,
       async () => {
         const fileIds = await this.#files.where('locationId').equals(location).primaryKeys();
         await this.#files.where('locationId').equals(location).delete();
         await this.#removeFaceDataForFiles(fileIds);
+        await this.#prunePeopleWithNoFaces();
         await this.#locations.delete(location);
       },
     );
