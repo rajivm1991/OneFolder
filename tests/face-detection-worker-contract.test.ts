@@ -1,15 +1,33 @@
+export {};
+
+// Stub the Web Worker's OffscreenCanvas API (unavailable under Jest's node test environment) —
+// bitmapToImageData() calls these directly; their actual pixel content is irrelevant here since
+// faceapi.tf.browser.fromPixels is mocked below and never inspects it.
+class FakeOffscreenCanvas {
+  constructor(
+    public width: number,
+    public height: number,
+  ) {}
+  getContext() {
+    return {
+      drawImage: jest.fn(),
+      getImageData: jest.fn(
+        () => ({ data: new Uint8ClampedArray(this.width * this.height * 4) }) as ImageData,
+      ),
+    };
+  }
+}
+(global as unknown as { OffscreenCanvas: unknown }).OffscreenCanvas = FakeOffscreenCanvas;
+
 const mockDispose = jest.fn();
 const mockFromPixels = jest.fn((...args: any[]) => ({ dispose: mockDispose }));
-jest.mock('@tensorflow/tfjs', () => ({
-  browser: { fromPixels: (...args: any[]) => mockFromPixels(...args) },
-}));
-
 const mockWithFaceDescriptors = jest.fn();
 const mockDetectAllFaces = jest.fn((...args: any[]) => ({
   withFaceLandmarks: () => ({ withFaceDescriptors: mockWithFaceDescriptors }),
 }));
 const mockLoadFromUri = jest.fn().mockResolvedValue(undefined);
 jest.mock('face-api.js', () => ({
+  tf: { browser: { fromPixels: (...args: any[]) => mockFromPixels(...args) } },
   nets: {
     tinyFaceDetector: { loadFromUri: (...args: any[]) => mockLoadFromUri(...args) },
     faceRecognitionNet: { loadFromUri: (...args: any[]) => mockLoadFromUri(...args) },
@@ -17,8 +35,6 @@ jest.mock('face-api.js', () => ({
   detectAllFaces: (...args: any[]) => mockDetectAllFaces(...args),
   TinyFaceDetectorOptions: jest.fn(),
 }));
-
-export {};
 
 describe('detectFacesInImageBitmap', () => {
   // faceDetectionCore.ts caches `modelsLoaded` at module scope, so each test gets a fresh
@@ -41,22 +57,16 @@ describe('detectFacesInImageBitmap', () => {
   });
 
   it('maps a detection result to {boundingBox, descriptor} and disposes the tensor', async () => {
+    const descriptor = new Float32Array([0.1, 0.2, 0.3]);
     mockWithFaceDescriptors.mockResolvedValue([
-      {
-        detection: { box: { x: 1, y: 2, width: 3, height: 4 } },
-        descriptor: new Float32Array([0.1, 0.2, 0.3]),
-      },
+      { detection: { box: { x: 1, y: 2, width: 3, height: 4 } }, descriptor },
     ]);
     const bitmap = { width: 10, height: 10 } as ImageBitmap;
     const result = await detectFacesInImageBitmap(bitmap);
-    // Float32Array -> number[] loses precision (0.1 becomes 0.10000000149011612 etc.), so the
-    // expected descriptor values below match what Array.from(new Float32Array(...)) actually
-    // produces, not the original float64 literals.
     expect(result).toEqual([
-      {
-        boundingBox: { x: 1, y: 2, width: 3, height: 4 },
-        descriptor: Array.from(new Float32Array([0.1, 0.2, 0.3])),
-      },
+      // Array.from(Float32Array) keeps float32 rounding — compare against the same
+      // conversion rather than a hand-typed literal, which would mismatch on precision.
+      { boundingBox: { x: 1, y: 2, width: 3, height: 4 }, descriptor: Array.from(descriptor) },
     ]);
     expect(mockDispose).toHaveBeenCalledTimes(1); // tensor disposed even on the success path
   });

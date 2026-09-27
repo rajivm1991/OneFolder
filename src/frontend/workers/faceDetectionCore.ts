@@ -1,5 +1,4 @@
 import * as faceapi from 'face-api.js';
-import * as tf from '@tensorflow/tfjs';
 
 let modelsLoaded = false;
 let modelsFailedToLoad = false;
@@ -34,24 +33,38 @@ export interface DetectedFace {
   descriptor: number[];
 }
 
+// face-api.js bundles its OWN nested, separate copy of @tensorflow/tfjs-core (a different
+// module instance from this project's top-level @tensorflow/tfjs). Its NetInput resolver does a
+// strict `instanceof tf.Tensor` check against its OWN nested tfjs-core's Tensor class, so a
+// tensor built with the outer @tensorflow/tfjs package would silently fail that check and fall
+// through to a broken Canvas/DOM path. We must build the tensor with face-api.js's own
+// re-exported `tf` (`faceapi.tf`) instead, so it's the same nested tfjs-core instance NetInput
+// checks against. That old nested tfjs-core also can't accept a raw ImageBitmap (no
+// `instanceof ImageBitmap` branch and no registered GPU/CPU kernel on its own isolated ENGINE
+// singleton), so we draw the bitmap onto our own OffscreenCanvas and pass a real ImageData
+// object instead — a Web-platform builtin (not defined by tfjs), so there's no
+// module-duplication problem for it, and fromPixels explicitly supports ImageData.
+function bitmapToImageData(bitmap: ImageBitmap): ImageData {
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('Could not get 2D context from OffscreenCanvas');
+  }
+  ctx.drawImage(bitmap, 0, 0);
+  return ctx.getImageData(0, 0, bitmap.width, bitmap.height);
+}
+
 export async function detectFacesInImageBitmap(
   bitmap: ImageBitmap,
   modelsUri = './resources/models',
 ): Promise<DetectedFace[]> {
   await ensureModelsLoaded(modelsUri);
 
-  const tensor = tf.browser.fromPixels(bitmap, 3);
+  const imageData = bitmapToImageData(bitmap);
+  const tensor = faceapi.tf.browser.fromPixels(imageData, 3);
   try {
-    // face-api.js's TS types for detectAllFaces only declare `tf.Tensor4D` (from face-api.js's
-    // own bundled `@tensorflow/tfjs-core` copy) as an accepted tensor input, but its runtime
-    // `NetInput` constructor explicitly branches on and accepts a `Tensor3D` too (see
-    // `node_modules/face-api.js/build/commonjs/dom/NetInput.js`, `isTensor3D` branch) —
-    // `tf.browser.fromPixels` (from our separately-installed `@tensorflow/tfjs`) returns a
-    // `Tensor3D`. The two packages' `Tensor4D`/`Tensor3D` types are structurally identical but
-    // nominally distinct TS classes, so a plain cast is rejected; `as unknown as any` bridges
-    // the type-only mismatch, not a runtime one.
     const detections = await faceapi
-      .detectAllFaces(tensor as unknown as any, new faceapi.TinyFaceDetectorOptions())
+      .detectAllFaces(tensor, new faceapi.TinyFaceDetectorOptions())
       .withFaceLandmarks()
       .withFaceDescriptors();
 
