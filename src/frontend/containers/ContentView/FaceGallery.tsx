@@ -1,122 +1,157 @@
-import React from 'react';
+import * as React from 'react';
+import { useEffect, useState } from 'react';
+import { action, when } from 'mobx';
+import { observer } from 'mobx-react-lite';
+import { encodeFilePath } from 'common/fs';
+import { NormalizedBox } from '../../../api/face';
+import { useStore } from '../../contexts/StoreContext';
+import { ClientFile } from '../../entities/File';
+import { usePromise } from '../../hooks/usePromise';
 import { GalleryProps } from './utils';
 
-import IMG_1 from 'resources/images/sample-profile-pictures/profile_1.jpg';
-import IMG_3 from 'resources/images/sample-profile-pictures/profile_3.jpg';
-import IMG_4 from 'resources/images/sample-profile-pictures/profile_4.jpg';
-import IMG_6 from 'resources/images/sample-profile-pictures/profile_6.jpg';
-import IMG_7 from 'resources/images/sample-profile-pictures/profile_7.jpg';
-import IMG_9 from 'resources/images/sample-profile-pictures/profile_9.jpg';
-import IMG_15 from 'resources/images/sample-profile-pictures/profile_15.jpg';
-import IMG_18 from 'resources/images/sample-profile-pictures/profile_18.jpg';
-import IMG_22 from 'resources/images/sample-profile-pictures/profile_22.jpg';
-import IMG_24 from 'resources/images/sample-profile-pictures/profile_24.jpg';
-import IMG_25 from 'resources/images/sample-profile-pictures/profile_25.jpg';
-import IMG_26 from 'resources/images/sample-profile-pictures/profile_26.jpg';
-import IMG_27 from 'resources/images/sample-profile-pictures/profile_27.jpg';
-import IMG_28 from 'resources/images/sample-profile-pictures/profile_28.jpg';
-import IMG_29 from 'resources/images/sample-profile-pictures/profile_29.jpg';
-import IMG_30 from 'resources/images/sample-profile-pictures/profile_30.jpg';
-import IMG_31 from 'resources/images/sample-profile-pictures/profile_31.jpg';
-import IMG_32 from 'resources/images/sample-profile-pictures/profile_32.jpg';
-import IMG_33 from 'resources/images/sample-profile-pictures/profile_33.jpg';
-import IMG_34 from 'resources/images/sample-profile-pictures/profile_34.jpg';
-import IMG_35 from 'resources/images/sample-profile-pictures/profile_35.jpg';
-import IMG_37 from 'resources/images/sample-profile-pictures/profile_37.jpg';
-import IMG_38 from 'resources/images/sample-profile-pictures/profile_38.jpg';
-import IMG_39 from 'resources/images/sample-profile-pictures/profile_39.jpg';
+interface FaceBox {
+  boundingBox: NormalizedBox;
+}
 
-import { shell } from 'electron';
+/** Faces are re-fetched after every this-many processed files (and when a run finishes), rather
+ * than on every single progress tick. */
+const REFRESH_EVERY_N_PROCESSED = 25;
 
-type ProfilePicProps = {
-  src: string;
-  name: string;
-};
+/** Pure so it's testable without a React-rendering test library (none exists in this repo). */
+export function visibleFaceBoxes(faces: FaceBox[], showBoxes: boolean): FaceBox[] {
+  return showBoxes ? faces : [];
+}
 
-const ProfilePic = ({ src, name }: ProfilePicProps) => {
+/** CSS for one box, as percentages of the image element the overlay is laid over. Boxes are
+ * stored normalized (0–1), so this lines up at whatever size the thumbnail is rendered. */
+export function faceBoxStyle(box: NormalizedBox): React.CSSProperties {
+  return {
+    left: `${box.x * 100}%`,
+    top: `${box.y * 100}%`,
+    width: `${box.width * 100}%`,
+    height: `${box.height * 100}%`,
+  };
+}
+
+/** Groups face rows by their fileId. */
+export function groupFacesByFile<T extends { fileId: string }>(faces: T[]): Map<string, T[]> {
+  const byFile = new Map<string, T[]>();
+  for (const face of faces) {
+    const list = byFile.get(face.fileId);
+    if (list) {
+      list.push(face);
+    } else {
+      byFile.set(face.fileId, [face]);
+    }
+  }
+  return byFile;
+}
+
+export const FaceOverlay: React.FC<{ faces: FaceBox[]; showBoxes: boolean }> = ({
+  faces,
+  showBoxes,
+}) => {
   return (
-    <div className="face-gallery__profile">
-      <img className="face-gallery__profile-picture" src={src} alt={`Profile picture of ${name}`} />
-      <p>{name}</p>
-    </div>
+    <>
+      {visibleFaceBoxes(faces, showBoxes).map((face, i) => (
+        <div
+          key={i}
+          data-testid={`face-box-${i}`}
+          className="face-bounding-box"
+          style={faceBoxStyle(face.boundingBox)}
+        />
+      ))}
+    </>
   );
 };
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-const FaceGallery = ({ contentRect, select, lastSelectionIndex }: GalleryProps) => {
+const getThumbnail = action((file: ClientFile) => file.thumbnailPath);
+
+/** Shows the file's (generated-on-demand) thumbnail — never the full-resolution original, which
+ * could be huge or in a format <img> can't show (HEIC, RAW...). A placeholder is shown until the
+ * thumbnail exists, or if it can't be generated. */
+const FaceThumbnail = observer(({ file }: { file: ClientFile }) => {
+  const { imageLoader } = useStore();
+  const imageSource = usePromise(file, async (file: ClientFile) => {
+    const freshlyGenerated = await imageLoader.ensureThumbnail(file);
+    // Once generated, the thumbnailPath gets a `?v=1` suffix (same as GalleryItem's Thumbnail)
+    if (freshlyGenerated) {
+      await when(() => getThumbnail(file).endsWith('?v=1'), { timeout: 10000 });
+    }
+    return getThumbnail(file);
+  });
+  const [loadError, setLoadError] = useState(false);
+
+  if (imageSource.tag === 'ready' && 'ok' in imageSource.value && !loadError) {
+    return (
+      <img
+        src={encodeFilePath(imageSource.value.ok)}
+        alt={file.name}
+        onError={() => setLoadError(true)}
+      />
+    );
+  }
+  return <div className="face-gallery-placeholder" title={file.name} />;
+});
+
+const FaceGallery: React.FC<GalleryProps> = observer(({ contentRect }) => {
+  const { fileStore, faceDetectionStore } = useStore();
+  const [showBoxes, setShowBoxes] = useState(true);
+  const [facesByFile, setFacesByFile] = useState<Map<string, FaceBox[]>>(new Map());
+
+  const refreshTick = faceDetectionStore.isRunning
+    ? Math.floor(faceDetectionStore.processedCount / REFRESH_EVERY_N_PROCESSED)
+    : -1; // also changes when a run ends, so its last few results show up
+
+  useEffect(() => {
+    let cancelled = false;
+    // One batched query for the whole list instead of one query per file
+    faceDetectionStore
+      .getFacesForFiles(fileStore.fileList.map((f) => f.id))
+      .then((faces) => {
+        if (!cancelled) {
+          setFacesByFile(groupFacesByFile(faces));
+        }
+      })
+      .catch((err) => console.error('Could not load faces', err));
+    return () => {
+      cancelled = true;
+    };
+  }, [fileStore.fileList, refreshTick, faceDetectionStore]);
+
+  // Face view shows the photos that contain at least one detected face
+  const filesWithFaces = fileStore.fileList.filter((file) => facesByFile.has(file.id));
+
   return (
-    <div className="face-gallery">
-      <div className="wip-container">
-        Face view is not done yet.
-        <br />
-        <br />
-        If you want to speed up the development you <br /> can vote on our roadmap:
-        <br />
-        <button
-          className="wip-link"
-          onClick={() => {
-            shell.openExternal('https://onefolder.canny.io/feedback/p/face-view');
-          }}
-        >
-          onefolder.canny.io/feedback/p/face-view
+    <div className="face-gallery" style={{ width: contentRect.width, height: contentRect.height }}>
+      <div className="face-gallery-toolbar">
+        <button onClick={() => setShowBoxes((v) => !v)}>
+          {showBoxes ? 'Hide face boxes' : 'Show face boxes'}
         </button>
-        <br />
-        <br />
-        <br />
-        Comments and ideas are welcome 🙏
+        {faceDetectionStore.isRunning && (
+          <span className="face-detection-progress">
+            Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
+          </span>
+        )}
+        {faceDetectionStore.modelLoadFailed && (
+          <span className="face-detection-error">
+            Face detection is unavailable: the detection model failed to load.
+          </span>
+        )}
       </div>
-      <ProfilePic src={IMG_29} name="Mason" />
-      <ProfilePic src={IMG_1} name="Emma" />
-      <ProfilePic src={IMG_3} name="Ava" />
-      <ProfilePic src={IMG_31} name="Alexander" />
-      <ProfilePic src={IMG_4} name="Isabella" />
-      <ProfilePic src={IMG_6} name="Noah" />
-      <ProfilePic src={IMG_7} name="Sophia" />
-      <ProfilePic src={IMG_9} name="Charlotte" />
-      <ProfilePic src={IMG_15} name="Elizabeth" />
-      <ProfilePic src={IMG_18} name="James" />
-      <ProfilePic src={IMG_22} name="Oliver" />
-      <ProfilePic src={IMG_24} name="Grace" />
-      <ProfilePic src={IMG_25} name="Chloe" />
-      <ProfilePic src={IMG_26} name="Elijah" />
-      <ProfilePic src={IMG_27} name="Lucas" />
-      <ProfilePic src={IMG_28} name="Victoria" />
-      <ProfilePic src={IMG_30} name="Logan" />
-      <ProfilePic src={IMG_32} name="Ethan" />
-      <ProfilePic src={IMG_33} name="Jacob" />
-      <ProfilePic src={IMG_34} name="Michael" />
-      <ProfilePic src={IMG_35} name="Daniel" />
-      <ProfilePic src={IMG_37} name="Jackson" />
-      <ProfilePic src={IMG_38} name="Sebastian" />
-      <ProfilePic src={IMG_39} name="Aiden" />
-      {/* copy */}
-      <ProfilePic src={IMG_29} name="Mason" />
-      <ProfilePic src={IMG_1} name="Emma" />
-      <ProfilePic src={IMG_3} name="Ava" />
-      <ProfilePic src={IMG_31} name="Alexander" />
-      <ProfilePic src={IMG_4} name="Isabella" />
-      <ProfilePic src={IMG_6} name="Noah" />
-      <ProfilePic src={IMG_7} name="Sophia" />
-      <ProfilePic src={IMG_9} name="Charlotte" />
-      <ProfilePic src={IMG_15} name="Elizabeth" />
-      <ProfilePic src={IMG_18} name="James" />
-      <ProfilePic src={IMG_22} name="Oliver" />
-      <ProfilePic src={IMG_24} name="Grace" />
-      <ProfilePic src={IMG_25} name="Chloe" />
-      <ProfilePic src={IMG_26} name="Elijah" />
-      <ProfilePic src={IMG_27} name="Lucas" />
-      <ProfilePic src={IMG_28} name="Victoria" />
-      <ProfilePic src={IMG_30} name="Logan" />
-      <ProfilePic src={IMG_32} name="Ethan" />
-      <ProfilePic src={IMG_33} name="Jacob" />
-      <ProfilePic src={IMG_34} name="Michael" />
-      <ProfilePic src={IMG_35} name="Daniel" />
-      <ProfilePic src={IMG_37} name="Jackson" />
-      <ProfilePic src={IMG_38} name="Sebastian" />
-      <ProfilePic src={IMG_39} name="Aiden" />
-      <ProfilePic src={IMG_29} name="Mason" />
+      <div className="face-gallery-grid">
+        {filesWithFaces.map((file) => (
+          <div key={file.id} className="face-gallery-item">
+            <FaceThumbnail file={file} />
+            <FaceOverlay faces={facesByFile.get(file.id) ?? []} showBoxes={showBoxes} />
+          </div>
+        ))}
+        {filesWithFaces.length === 0 && !faceDetectionStore.isRunning && (
+          <span className="face-gallery-empty">No faces found in these photos.</span>
+        )}
+      </div>
     </div>
   );
-};
+});
 
 export default FaceGallery;

@@ -12,6 +12,7 @@ import {
   StringConditionDTO,
 } from '../api/data-storage-search';
 import { DismissedDuplicateGroupDTO } from '../api/dismissed-duplicate-group';
+import { FaceDetectionStatusDTO, FaceDTO } from '../api/face';
 import { FileDTO } from '../api/file';
 import { FileSearchDTO } from '../api/file-search';
 import { ID } from '../api/id';
@@ -32,6 +33,8 @@ export default class Backend implements DataStorage {
   #searches: Table<FileSearchDTO, ID>;
   #dismissedDuplicateGroups: Table<DismissedDuplicateGroupDTO, ID>;
   #visualHashes: Table<VisualHashDTO, ID>;
+  #faces: Table<FaceDTO, ID>;
+  #faceDetectionStatus: Table<FaceDetectionStatusDTO, ID>;
   #db: Dexie;
   #notifyChange: () => void;
 
@@ -44,6 +47,8 @@ export default class Backend implements DataStorage {
     this.#searches = db.table('searches');
     this.#dismissedDuplicateGroups = db.table('dismissedDuplicateGroups');
     this.#visualHashes = db.table('visualHashes');
+    this.#faces = db.table('faces');
+    this.#faceDetectionStatus = db.table('faceDetectionStatus');
     this.#db = db;
     this.#notifyChange = notifyChange;
   }
@@ -54,10 +59,14 @@ export default class Backend implements DataStorage {
       this.#files,
       this.#visualHashes,
       this.#dismissedDuplicateGroups,
+      this.#faces,
+      this.#faceDetectionStatus,
       async () => {
         await this.#files.clear();
         await this.#visualHashes.clear();
         await this.#dismissedDuplicateGroups.clear();
+        await this.#faces.clear();
+        await this.#faceDetectionStatus.clear();
       },
     );
     this.#notifyChange();
@@ -84,6 +93,40 @@ export default class Backend implements DataStorage {
     console.info('IndexedDB: Clearing all visual hash cache...');
     await this.#visualHashes.clear();
     this.#notifyChange();
+  }
+
+  async fetchFacesForFile(fileId: ID): Promise<FaceDTO[]> {
+    console.info('IndexedDB: Fetching faces for file', fileId, '...');
+    return this.#faces.where('fileId').equals(fileId).toArray();
+  }
+
+  async fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]> {
+    console.info('IndexedDB: Fetching faces for', fileIds.length, 'files...');
+    return this.#faces.where('fileId').anyOf(fileIds).toArray();
+  }
+
+  async fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]> {
+    console.info('IndexedDB: Fetching face detection status for', fileIds.length, 'files...');
+    const statuses = await this.#faceDetectionStatus.bulkGet(fileIds);
+    return statuses.filter((s): s is FaceDetectionStatusDTO => s !== undefined);
+  }
+
+  async saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void> {
+    await this.#db.transaction('rw', this.#faces, this.#faceDetectionStatus, async () => {
+      // Clear the file's previous faces first: on re-detection of a changed file they're stale
+      await this.#faces.where('fileId').equals(status.fileId).delete();
+      if (faces.length > 0) {
+        await this.#faces.bulkAdd(faces);
+      }
+      await this.#faceDetectionStatus.put(status);
+    });
+    this.#notifyChange();
+  }
+
+  /** Must be called inside a transaction that includes #faces and #faceDetectionStatus */
+  async #removeFaceDataForFiles(fileIds: ID[]): Promise<void> {
+    await this.#faces.where('fileId').anyOf(fileIds).delete();
+    await this.#faceDetectionStatus.bulkDelete(fileIds);
   }
 
   async fetchDismissedDuplicateGroups(): Promise<DismissedDuplicateGroupDTO[]> {
@@ -287,16 +330,34 @@ export default class Backend implements DataStorage {
 
   async removeFiles(files: ID[]): Promise<void> {
     console.info('IndexedDB: Removing files...', files);
-    await this.#files.bulkDelete(files);
+    await this.#db.transaction(
+      'rw',
+      this.#files,
+      this.#faces,
+      this.#faceDetectionStatus,
+      async () => {
+        await this.#files.bulkDelete(files);
+        await this.#removeFaceDataForFiles(files);
+      },
+    );
     this.#notifyChange();
   }
 
   async removeLocation(location: ID): Promise<void> {
     console.info('IndexedDB: Removing location...', location);
-    await this.#db.transaction('rw', this.#files, this.#locations, () => {
-      this.#files.where('locationId').equals(location).delete();
-      this.#locations.delete(location);
-    });
+    await this.#db.transaction(
+      'rw',
+      this.#files,
+      this.#locations,
+      this.#faces,
+      this.#faceDetectionStatus,
+      async () => {
+        const fileIds = await this.#files.where('locationId').equals(location).primaryKeys();
+        await this.#files.where('locationId').equals(location).delete();
+        await this.#removeFaceDataForFiles(fileIds);
+        await this.#locations.delete(location);
+      },
+    );
     this.#notifyChange();
   }
 

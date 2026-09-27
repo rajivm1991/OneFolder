@@ -1,19 +1,46 @@
 .face-gallery {
   display: flex;
-  gap: 1.2rem;
-  padding: 1.2rem;
+  flex-direction: column;
+  overflow: auto;
+}
+
+.face-gallery-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px;
+}
+
+.face-gallery-grid {
+  display: flex;
   flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 8px 8px;
+}
 
-  .face-gallery__profile {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    opacity: 0.3;
+// The item shrink-wraps the image exactly, so the overlay's percentage-positioned boxes
+// (normalized 0–1 face coordinates) line up with the rendered thumbnail at any size.
+.face-gallery-item {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
 
-    .face-gallery__profile-picture {
-      border-radius: 50%;
-      width: 140px;
-      border: 5px solid var(--accent-color);
-    }
+  img {
+    display: block;
+    height: 200px;
+    width: auto;
   }
+}
+
+.face-gallery-placeholder {
+  width: 200px;
+  height: 200px;
+  background: var(--background-color-alt, rgba(128, 128, 128, 0.15));
+}
+
+.face-bounding-box {
+  position: absolute;
+  border: 2px solid #4caf50;
+  box-sizing: border-box;
+  pointer-events: none;
 }

@@ -13,6 +13,8 @@ import ImageLoader from '../image/ImageLoader';
 import { RendererMessenger } from 'src/ipc/renderer';
 import SearchStore from './SearchStore';
 import { runGpsBackfill } from './GpsBackfill';
+import { FaceDetectionStore } from './FaceDetectionStore';
+import { detectFacesUsingWorker } from '../image/FaceDetectionDispatch';
 
 // This will throw exceptions whenever we try to modify the state directly without an action
 // Actions will batch state modifications -> better for performance
@@ -38,6 +40,7 @@ class RootStore {
   readonly locationStore: LocationStore;
   readonly uiStore: UiStore;
   readonly searchStore: SearchStore;
+  readonly faceDetectionStore: FaceDetectionStore;
   readonly exifTool: ExifIO;
   readonly imageLoader: ImageLoader;
   readonly getWindowTitle: () => string;
@@ -52,6 +55,9 @@ class RootStore {
     this.locationStore = new LocationStore(backend, this);
     this.uiStore = new UiStore(this);
     this.searchStore = new SearchStore(backend, this);
+    this.faceDetectionStore = new FaceDetectionStore(backend, (absolutePath) =>
+      detectFacesUsingWorker(absolutePath),
+    );
     this.#backend = backend;
     this.#backup = backup;
     this.exifTool = new ExifIO(localStorage.getItem('hierarchical-separator') || undefined);

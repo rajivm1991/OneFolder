@@ -1,6 +1,7 @@
 import { IndexableType } from 'dexie';
 import { ConditionDTO, OrderBy, OrderDirection } from './data-storage-search';
 import { DismissedDuplicateGroupDTO } from './dismissed-duplicate-group';
+import { FaceDetectionStatusDTO, FaceDTO } from './face';
 import { FileDTO } from './file';
 import { FileSearchDTO } from './file-search';
 import { ID } from './id';
@@ -57,4 +58,17 @@ export interface DataStorage {
   saveVisualHashes(hashes: VisualHashDTO[]): Promise<void>;
   removeVisualHashes(absolutePaths: string[]): Promise<void>;
   clearVisualHashCache(): Promise<void>;
+
+  // Face Detection
+  fetchFacesForFile(fileId: ID): Promise<FaceDTO[]>;
+  /** Batched variant of fetchFacesForFile: all faces belonging to any of the given files */
+  fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]>;
+  /** Detection status records for the given files; files never attempted have no record */
+  fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]>;
+  /**
+   * Atomically records the outcome of one detection attempt for `status.fileId`: removes that
+   * file's previous (possibly stale) faces, stores `faces` (may be empty), and upserts `status`.
+   */
+  saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void>;
+  // Note: faces + detection statuses of removed files are cleaned up by removeFiles/removeLocation.
 }
