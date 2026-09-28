@@ -320,21 +320,21 @@ const Location = observer(
       (c: any) => c.value === pathAsSearchPath(nodeData.path),
     );
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
-      if (existingSearchCrit) {
-        uiStore.removeSearchCriteria(existingSearchCrit);
-        uiStore.deselectLocation(nodeData);
-      } else if (event.ctrlKey) {
-        uiStore.addSearchCriteria(pathCriteria(nodeData.path));
-        uiStore.selectLocation(nodeData);
-      } else {
-        uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
-        uiStore.selectLocation(nodeData, true);
-      }
-    },
-    [existingSearchCrit, nodeData, uiStore],
-  );
+    const handleClick = useCallback(
+      (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
+        if (existingSearchCrit) {
+          uiStore.removeSearchCriteria(existingSearchCrit);
+          uiStore.deselectLocation(nodeData);
+        } else if (event.ctrlKey) {
+          uiStore.addSearchCriteria(pathCriteria(nodeData.path));
+          uiStore.selectLocation(nodeData);
+        } else {
+          uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
+          uiStore.selectLocation(nodeData, true);
+        }
+      },
+      [existingSearchCrit, nodeData, uiStore],
+    );
 
     const fileDnD = useFileDropHandling(
       nodeData.id,
@@ -453,13 +453,11 @@ interface ILocationTreeProps {
   onExclude: (loc: ClientSubLocation) => void;
 }
 
-const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
+const LocationsTree = observer(({ onDelete, onExclude }: ILocationTreeProps) => {
   const { locationStore, uiStore } = useStore();
   const [expansion, setExpansion] = useState<IExpansionState>({});
-  const selectedIds = useMemo(
-    () => new Set(uiStore.locationSelection),
-    [uiStore.locationSelection],
-  );
+  // Not memoized on the observable set: its reference never changes, so the copy would go stale
+  const selectedIds = new Set(uiStore.locationSelection);
 
   const treeData: ITreeData = useMemo<ITreeData>(
     () => ({
@@ -520,7 +518,7 @@ const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
       onBranchKeyDown={handleBranchKeyDown}
     />
   );
-};
+});
 
 const LocationsPanel = observer((props: Partial<MultiSplitPaneProps>) => {
   const { locationStore } = useStore();
