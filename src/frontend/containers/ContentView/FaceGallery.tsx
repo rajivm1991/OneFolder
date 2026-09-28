@@ -181,6 +181,12 @@ const FaceThumbnail = observer(
 );
 
 /** The default view: one tile per person. */
+const formatWaited = (seconds: number): string =>
+  seconds < 60 ? 'under a minute' : `${Math.floor(seconds / 60)} min`;
+
+const formatRemaining = (seconds: number): string =>
+  seconds < 60 ? 'under a minute' : `${Math.ceil(seconds / 60)} min`;
+
 const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observer(
   ({ onSelectPerson }) => {
     const { fileStore, faceDetectionStore } = useStore();
@@ -216,6 +222,10 @@ const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observe
       () => new Map(fileStore.fileList.map((f) => [f.id, f])),
       [fileStore.fileList],
     );
+    // Most photos first; Array.sort is stable so ties keep their original order.
+    const sortedPeople = [...people].sort(
+      (a, b) => (facesByPerson.get(b.id)?.length ?? 0) - (facesByPerson.get(a.id)?.length ?? 0),
+    );
 
     // Toolbar and grid are siblings: the toolbar is a non-wrapping flex row, so a grid nested
     // inside it would be squeezed in next to the status text instead of laid out below it.
@@ -227,6 +237,23 @@ const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observe
               Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
             </span>
           )}
+          {faceDetectionStore.isRunning && (
+            <button onClick={() => faceDetectionStore.setPaused(!faceDetectionStore.isPaused)}>
+              {faceDetectionStore.isPaused ? 'Resume' : 'Pause'}
+            </button>
+          )}
+          {faceDetectionStore.isRunning && faceDetectionStore.isCoolingDown && (
+            <span className="face-detection-progress">
+              Computer reached a {faceDetectionStore.thermalState} temperature, waiting for it to
+              cool down ({formatWaited(faceDetectionStore.coolingSeconds)} so far)
+            </span>
+          )}
+          {faceDetectionStore.isRunning && faceDetectionStore.restSecondsLeft > 0 && (
+            <span className="face-detection-progress">
+              Temperature dropped, resting {formatRemaining(faceDetectionStore.restSecondsLeft)}{' '}
+              more to cool down further
+            </span>
+          )}
           {faceDetectionStore.modelLoadFailed && (
             <span className="face-detection-error">
               Face detection is unavailable: the detection model failed to load.
@@ -234,7 +261,7 @@ const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observe
           )}
         </div>
         <div className="people-grid">
-          {people.map((person) => {
+          {sortedPeople.map((person) => {
             const faces = facesByPerson.get(person.id) ?? [];
             const count = faces.length;
             if (count === 0) {

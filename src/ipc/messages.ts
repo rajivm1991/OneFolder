@@ -30,6 +30,7 @@ export const MESSAGE_BOX = 'MESSAGE_BOX';
 export const MESSAGE_BOX_SYNC = 'MESSAGE_BOX_SYNC';
 export const GET_PATH = 'GET_PATH';
 export const TRASH_FILE = 'TRASH_FILE';
+export const GET_THERMAL_STATE = 'GET_THERMAL_STATE';
 export const SET_FULL_SCREEN = 'SET_FULL_SCREEN';
 export const IS_FULL_SCREEN = 'IS_FULL_SCREEN';
 export const FULL_SCREEN_CHANGED = 'FULL_SCREEN_CHANGED';

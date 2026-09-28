@@ -1,4 +1,4 @@
-import { makeObservable, observable, runInAction } from 'mobx';
+import { action, computed, makeObservable, observable, runInAction } from 'mobx';
 import { FaceDetectionStatusDTO, FaceDTO, NormalizedBox } from '../../api/face';
 import { FileDTO } from '../../api/file';
 import { generateId, ID } from '../../api/id';
@@ -28,6 +28,12 @@ interface FaceDetectionDataStorage {
 
 const CONCURRENCY = 3;
 const MAX_RETRIES_PER_FILE = 1;
+/** How often a paused/overheated run re-checks whether it may continue. */
+const COOLDOWN_POLL_MS = 5000;
+/** Electron thermal states at which detection backs off until the machine cools down. */
+/** After the state drops below serious, keep resting this long so the machine cools further. */
+const EXTRA_COOLDOWN_MS = 3 * 60 * 1000;
+const HOT_THERMAL_STATES = new Set(['serious', 'critical']);
 
 /** Euclidean distance below which two face descriptors are considered the same person. 0.6 is
  * face-api.js's documented upper bound for "same person" but merges distinct people too often in
@@ -70,6 +76,17 @@ export class FaceDetectionStore {
   @observable totalCount = 0;
   @observable isRunning = false;
   @observable modelLoadFailed = false;
+  /** User-requested pause: workers finish their current file, then wait. */
+  @observable isPaused = false;
+  /** Last OS thermal state seen ('nominal' | 'fair' | 'serious' | 'critical' | 'unknown'). */
+  @observable thermalState = 'unknown';
+  /** Seconds detection has been backing off because of heat; 0 when not cooling down. */
+  @observable coolingSeconds = 0;
+  private coolingSince: number | undefined;
+  /** Seconds of the extra rest left after the temperature dropped; 0 when not resting. */
+  @observable restSecondsLeft = 0;
+  private restUntil: number | undefined;
+  private wasHot = false;
 
   private readonly queue = new Map<ID, FileForDetection>();
   private readonly inFlight = new Set<ID>();
@@ -80,8 +97,60 @@ export class FaceDetectionStore {
   constructor(
     private dataStorage: FaceDetectionDataStorage,
     private detectForFile: (absolutePath: string) => Promise<DetectedFace[]>,
+    private getThermalState?: () => Promise<string>,
   ) {
     makeObservable(this);
+  }
+
+  @action setPaused(paused: boolean): void {
+    this.isPaused = paused;
+  }
+
+  /** True while the machine is running hot and detection is backing off. */
+  @computed get isCoolingDown(): boolean {
+    return HOT_THERMAL_STATES.has(this.thermalState);
+  }
+
+  /** Blocks while paused by the user or while the OS reports serious/critical thermal pressure. */
+  private async waitUntilMayRun(): Promise<void> {
+    for (;;) {
+      if (this.getThermalState !== undefined) {
+        try {
+          const state = await this.getThermalState();
+          runInAction(() => {
+            this.thermalState = state;
+            const now = Date.now();
+            if (HOT_THERMAL_STATES.has(state)) {
+              this.wasHot = true;
+              this.restUntil = undefined;
+              this.restSecondsLeft = 0;
+              this.coolingSince ??= now;
+              this.coolingSeconds = Math.floor((now - this.coolingSince) / 1000);
+            } else {
+              this.coolingSince = undefined;
+              this.coolingSeconds = 0;
+              if (this.wasHot) {
+                // Dropped below serious: hold for the extra rest before letting work resume.
+                this.restUntil ??= now + EXTRA_COOLDOWN_MS;
+                if (now >= this.restUntil) {
+                  this.wasHot = false;
+                  this.restUntil = undefined;
+                  this.restSecondsLeft = 0;
+                } else {
+                  this.restSecondsLeft = Math.ceil((this.restUntil - now) / 1000);
+                }
+              }
+            }
+          });
+        } catch {
+          // thermal info is best-effort; never let it stall detection
+        }
+      }
+      if (!this.isPaused && !this.isCoolingDown && !this.wasHot) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, COOLDOWN_POLL_MS));
+    }
   }
 
   async getFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]> {
@@ -222,7 +291,12 @@ export class FaceDetectionStore {
 
   private async drain(): Promise<void> {
     const runner = async () => {
-      for (let file = this.takeNext(); file !== undefined; file = this.takeNext()) {
+      for (;;) {
+        await this.waitUntilMayRun();
+        const file = this.takeNext();
+        if (file === undefined) {
+          break;
+        }
         try {
           await this.processFile(file);
         } finally {
