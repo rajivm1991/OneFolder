@@ -29,9 +29,12 @@ interface FaceDetectionDataStorage {
 const CONCURRENCY = 3;
 const MAX_RETRIES_PER_FILE = 1;
 
-/** Euclidean distance below which two face descriptors are considered the same person — the
- * standard working value for 128-d face-recognition embeddings (not user-facing/tunable). */
-const PERSON_MATCH_THRESHOLD = 0.6;
+/** Euclidean distance below which two face descriptors are considered the same person. 0.6 is
+ * face-api.js's documented upper bound for "same person" but merges distinct people too often in
+ * practice; 0.5 trades that for occasionally splitting one person into two clusters, which a
+ * future merge feature can fix — a false merge has no such recovery path today. Not user-facing/
+ * tunable in this pass. */
+const PERSON_MATCH_THRESHOLD = 0.5;
 
 function euclideanDistance(a: number[], b: number[]): number {
   let sum = 0;
