@@ -91,10 +91,11 @@ class LocationStore {
     this.backend.saveLocation(loc);
   }
 
-  /** Fire-and-forget: hands files to the face detection queue, which skips already-detected ones */
-  private enqueueFaceDetection(files: FileDTO[]): void {
+  /** Fire-and-forget: tells the face detection store about files. Scanning itself only starts when
+   * the user asks for it (or already did this session). `replaceAll`: `files` is the whole library. */
+  private enqueueFaceDetection(files: FileDTO[], replaceAll = false): void {
     this.rootStore.faceDetectionStore
-      .enqueueFiles(files)
+      .registerFiles(files, replaceAll)
       .catch((err) => console.error('Face detection failed', err));
   }
 
@@ -336,7 +337,10 @@ class LocationStore {
     // location is unreachable or that are missing from disk are left out, so they aren't recorded
     // as failed while temporarily unavailable.
     const libraryFiles = await this.backend.fetchFiles('id', OrderDirection.Asc);
-    this.enqueueFaceDetection(libraryFiles.filter((f) => pathsOnDisk.has(f.absolutePath)));
+    this.enqueueFaceDetection(
+      libraryFiles.filter((f) => pathsOnDisk.has(f.absolutePath)),
+      true,
+    );
 
     if (foundNewFiles) {
       AppToaster.show({ message: 'New images detected.', timeout: 5000 }, progressToastKey);

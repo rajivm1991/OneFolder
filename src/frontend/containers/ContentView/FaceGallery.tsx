@@ -232,10 +232,17 @@ const PeopleGrid: React.FC<{ onSelectPerson: (personId: ID) => void }> = observe
     return (
       <>
         <div className="face-gallery-toolbar">
-          {faceDetectionStore.isRunning && (
+          {faceDetectionStore.libraryTotal > 0 && (
             <span className="face-detection-progress">
-              Detecting faces: {faceDetectionStore.processedCount} / {faceDetectionStore.totalCount}
+              Scanned for faces:{' '}
+              {faceDetectionStore.libraryTotal - faceDetectionStore.unscannedCount} /{' '}
+              {faceDetectionStore.libraryTotal} photos
             </span>
+          )}
+          {!faceDetectionStore.isRunning && faceDetectionStore.unscannedCount > 0 && (
+            <button onClick={() => faceDetectionStore.startScanning()}>
+              Click here to start scanning
+            </button>
           )}
           {faceDetectionStore.isRunning && (
             <button onClick={() => faceDetectionStore.setPaused(!faceDetectionStore.isPaused)}>

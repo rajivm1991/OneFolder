@@ -299,7 +299,10 @@ describe('FaceDetectionStore', () => {
       },
     };
     const detectForFile = async () => [
-      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: new Array(128).fill(0.1) },
+      {
+        boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 },
+        descriptor: new Array(128).fill(0.1),
+      },
     ];
     const store = new FaceDetectionStore(dataStorage as any, detectForFile);
 
@@ -449,7 +452,10 @@ describe('FaceDetectionStore', () => {
       ) => {},
     };
     const detectForFile = async () => [
-      { boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 }, descriptor: new Array(128).fill(0.4) },
+      {
+        boundingBox: { x: 0, y: 0, width: 0.1, height: 0.1 },
+        descriptor: new Array(128).fill(0.4),
+      },
     ];
     const store = new FaceDetectionStore(dataStorage as any, detectForFile);
 
@@ -525,5 +531,56 @@ describe('FaceDetectionStore', () => {
     expect(storage.faces).toHaveLength(1);
     expect(storage.people).toHaveLength(1);
     expect(storage.faces[0].personId).toBe(storage.people[0].id);
+  });
+});
+
+describe('FaceDetectionStore on-request scanning', () => {
+  const doneStatus = (fileId: string): FaceDetectionStatusDTO => ({
+    fileId,
+    status: 'done',
+    dateDetected: new Date('2026-07-01'),
+  });
+
+  it('registering files reports x / y but processes nothing until startScanning', async () => {
+    const storage = createFakeStorage([doneStatus('a')]);
+    const detect = jest.fn(async () => []);
+    const store = new FaceDetectionStore(storage, detect);
+
+    await store.registerFiles([file('a'), file('b'), file('c')], true);
+    expect(detect).not.toHaveBeenCalled();
+    expect(store.isRunning).toBe(false);
+    expect(store.libraryTotal).toBe(3);
+    expect(store.unscannedCount).toBe(2);
+
+    await store.startScanning();
+    expect(detect).toHaveBeenCalledTimes(2);
+    expect(store.unscannedCount).toBe(0);
+    expect(store.libraryTotal).toBe(3);
+  });
+
+  it('queues newly registered files straight away once scanning was requested', async () => {
+    const storage = createFakeStorage();
+    const detect = jest.fn(async () => []);
+    const store = new FaceDetectionStore(storage, detect);
+
+    await store.registerFiles([file('a')], true);
+    await store.startScanning();
+    expect(detect).toHaveBeenCalledTimes(1);
+
+    await store.registerFiles([file('b')]);
+    expect(detect).toHaveBeenCalledTimes(2);
+    expect(store.libraryTotal).toBe(2);
+    expect(store.unscannedCount).toBe(0);
+  });
+
+  it('replaceAll forgets files that left the library', async () => {
+    const store = new FaceDetectionStore(
+      createFakeStorage(),
+      jest.fn(async () => []),
+    );
+    await store.registerFiles([file('a'), file('b')], true);
+    await store.registerFiles([file('a')], true);
+    expect(store.libraryTotal).toBe(1);
+    expect(store.unscannedCount).toBe(1);
   });
 });

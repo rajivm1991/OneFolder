@@ -87,6 +87,14 @@ export class FaceDetectionStore {
   @observable restSecondsLeft = 0;
   private restUntil: number | undefined;
   private wasHot = false;
+  /** Whole-library progress: photos known to the app and how many of them still lack a scan. */
+  @observable libraryTotal = 0;
+  @observable unscannedCount = 0;
+  /** Set once the user asks to scan; until then files are only registered, never processed. */
+  private scanRequested = false;
+  private knownIds = new Set<ID>();
+  private readonly unscannedIds = new Set<ID>();
+  private readonly pending = new Map<ID, FileForDetection>();
 
   private readonly queue = new Map<ID, FileForDetection>();
   private readonly inFlight = new Set<ID>();
@@ -109,6 +117,12 @@ export class FaceDetectionStore {
   /** True while the machine is running hot and detection is backing off. */
   @computed get isCoolingDown(): boolean {
     return HOT_THERMAL_STATES.has(this.thermalState);
+  }
+
+  /** Read via a computed so the polling loop (outside any reaction) doesn't trip MobX's
+   * observableRequiresReaction warning on every poll. */
+  @computed private get isBlocked(): boolean {
+    return this.isPaused || this.isCoolingDown || this.wasHot;
   }
 
   /** Blocks while paused by the user or while the OS reports serious/critical thermal pressure. */
@@ -146,7 +160,7 @@ export class FaceDetectionStore {
           // thermal info is best-effort; never let it stall detection
         }
       }
-      if (!this.isPaused && !this.isCoolingDown && !this.wasHot) {
+      if (!this.isBlocked) {
         return;
       }
       await new Promise((resolve) => setTimeout(resolve, COOLDOWN_POLL_MS));
@@ -181,35 +195,99 @@ export class FaceDetectionStore {
     if (this.modelLoadFailed) {
       return; // don't keep retrying once the model is known to be unloadable
     }
-    const candidates = files.filter((f) => !this.inFlight.has(f.id));
-    if (candidates.length > 0) {
-      const statuses = await this.dataStorage.fetchFaceDetectionStatuses(
-        candidates.map((f) => f.id),
-      );
-      const statusById = new Map(statuses.map((s) => [s.fileId, s]));
+    return this.addToQueue(await this.findNeedingDetection(files));
+  }
 
-      let added = 0;
-      for (const file of candidates) {
-        // Re-check after the await: another enqueue/drain may have picked this file up meanwhile
-        if (this.inFlight.has(file.id) || !needsDetection(file, statusById.get(file.id))) {
+  /**
+   * Scanning only runs on request: this records which of `files` still need detection (shown as
+   * "scanned x / y" in the UI) without processing them. Once `startScanning` has been called this
+   * session, newly registered files are queued straight away. With `replaceAll`, `files` is the
+   * whole library and anything no longer in it is forgotten.
+   */
+  async registerFiles(files: FileForDetection[], replaceAll = false): Promise<void> {
+    if (this.modelLoadFailed) {
+      return;
+    }
+    const needing = await this.findNeedingDetection(files);
+    const needingIds = new Set(needing.map((f) => f.id));
+    runInAction(() => {
+      if (replaceAll) {
+        this.knownIds = new Set(files.map((f) => f.id));
+        for (const id of Array.from(this.unscannedIds)) {
+          if (!this.knownIds.has(id)) {
+            this.unscannedIds.delete(id);
+            this.pending.delete(id);
+          }
+        }
+      } else {
+        files.forEach((f) => this.knownIds.add(f.id));
+      }
+      for (const file of files) {
+        if (this.queue.has(file.id) || this.inFlight.has(file.id)) {
           continue;
         }
-        if (!this.queue.has(file.id)) {
-          added += 1;
+        if (needingIds.has(file.id)) {
+          this.pending.set(file.id, file);
+          this.unscannedIds.add(file.id);
+        } else if (!this.inFlight.has(file.id)) {
+          this.pending.delete(file.id);
+          this.unscannedIds.delete(file.id);
         }
-        this.queue.set(file.id, file); // latest info wins if it was already queued
       }
-      if (added > 0) {
-        runInAction(() => {
-          if (!this.isRunning) {
-            // A fresh run: progress restarts from 0 / N
-            this.processedCount = 0;
-            this.totalCount = 0;
-            this.isRunning = true;
-          }
-          this.totalCount += added;
-        });
+      this.syncCounts();
+    });
+    if (this.scanRequested) {
+      return this.startScanning();
+    }
+  }
+
+  /** Queues everything registered so far and keeps queuing newly registered files from now on. */
+  async startScanning(): Promise<void> {
+    this.scanRequested = true;
+    const files = Array.from(this.pending.values());
+    this.pending.clear();
+    return this.addToQueue(files);
+  }
+
+  private async findNeedingDetection(files: FileForDetection[]): Promise<FileForDetection[]> {
+    const candidates = files.filter((f) => !this.inFlight.has(f.id));
+    if (candidates.length === 0) {
+      return [];
+    }
+    const statuses = await this.dataStorage.fetchFaceDetectionStatuses(candidates.map((f) => f.id));
+    const statusById = new Map(statuses.map((s) => [s.fileId, s]));
+    return candidates.filter((f) => needsDetection(f, statusById.get(f.id)));
+  }
+
+  private syncCounts(): void {
+    this.libraryTotal = Math.max(this.knownIds.size, this.unscannedIds.size);
+    this.unscannedCount = this.unscannedIds.size;
+  }
+
+  private addToQueue(files: FileForDetection[]): Promise<void> | undefined {
+    let added = 0;
+    for (const file of files) {
+      // Re-check after any await: another enqueue/drain may have picked this file up meanwhile
+      if (this.inFlight.has(file.id)) {
+        continue;
       }
+      if (!this.queue.has(file.id)) {
+        added += 1;
+      }
+      this.queue.set(file.id, file); // latest info wins if it was already queued
+      this.unscannedIds.add(file.id);
+    }
+    if (added > 0) {
+      runInAction(() => {
+        if (!this.isRunning) {
+          // A fresh run: progress restarts from 0 / N
+          this.processedCount = 0;
+          this.totalCount = 0;
+          this.isRunning = true;
+        }
+        this.totalCount += added;
+        this.syncCounts();
+      });
     }
     if (this.queue.size > 0 && !this.drainPromise && !this.modelLoadFailed) {
       this.drainPromise = this.drain();
@@ -382,6 +460,8 @@ export class FaceDetectionStore {
     }
     runInAction(() => {
       this.processedCount += 1;
+      this.unscannedIds.delete(file.id);
+      this.syncCounts();
     });
   }
 }

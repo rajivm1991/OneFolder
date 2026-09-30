@@ -85,6 +85,10 @@ let rendererConfig = {
   },
   externals: {
     fsevents: "require('fsevents')",
+    // Native module: bundling it breaks the `bindings` package's runtime lookup
+    // of its own .node binary, since that lookup depends on real __dirname/file
+    // paths that webpack's bundling destroys.
+    'better-sqlite3': 'commonjs better-sqlite3',
   },
   module: {
     rules: [
