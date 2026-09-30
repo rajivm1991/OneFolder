@@ -598,6 +598,34 @@ class LocationStore {
     return this.backend.searchFiles(crit, 'id', OrderDirection.Asc);
   }
 
+  /**
+   * Checks which indexed files under `folderPath` no longer exist on disk. Does not modify anything: the caller decides what to do with them.
+   * Returns undefined when the location root itself is unreachable (e.g. an unmounted drive), since then every file would look deleted.
+   */
+  @action async findMissingFilesInFolder(
+    location: ClientLocation,
+    folderPath: string,
+  ): Promise<{ checked: number; missing: FileDTO[] } | undefined> {
+    if (!(await fse.pathExists(location.path))) {
+      return undefined;
+    }
+    const locFiles = await this.findLocationFiles(location.id);
+    const prefix = folderPath.endsWith(SysPath.sep) ? folderPath : folderPath + SysPath.sep;
+    const folderFiles = locFiles.filter((f) => f.absolutePath.startsWith(prefix));
+    const exists = await promiseAllLimit(
+      folderFiles.map((f) => () => fse.pathExists(f.absolutePath)),
+      50,
+    );
+    return { checked: folderFiles.length, missing: folderFiles.filter((_, i) => !exists[i]) };
+  }
+
+  /** Removes the given files from the library (not from disk) and refreshes the views */
+  @action async removeFilesFromLibrary(ids: ID[]): Promise<void> {
+    await this.backend.removeFiles(ids);
+    await this.rootStore.fileStore.refetch();
+    await this.rootStore.fileStore.refetchFileCounts();
+  }
+
   @action async removeSublocationFiles(subLoc: ClientSubLocation): Promise<void> {
     const crit = new ClientStringSearchCriteria(
       'absolutePath',
