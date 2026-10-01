@@ -1,7 +1,8 @@
-import { makeObservable, observable, runInAction } from 'mobx';
+import { action, computed, makeObservable, observable, runInAction } from 'mobx';
 import { FaceDetectionStatusDTO, FaceDTO, NormalizedBox } from '../../api/face';
 import { FileDTO } from '../../api/file';
 import { generateId, ID } from '../../api/id';
+import { PersonDTO } from '../../api/person';
 
 /** `dateLastIndexed` (not `dateModified`!) is the content-change signal: LocationStore bumps it
  * when a file changed on disk, while FileDTO.dateModified means "edited in OneFolder" (e.g. tags)
@@ -16,11 +17,39 @@ interface DetectedFace {
 interface FaceDetectionDataStorage {
   fetchFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]>;
   fetchFaceDetectionStatuses(fileIds: ID[]): Promise<FaceDetectionStatusDTO[]>;
-  saveFaceDetectionResult(status: FaceDetectionStatusDTO, faces: FaceDTO[]): Promise<void>;
+  fetchAllPeople(): Promise<PersonDTO[]>;
+  renamePerson(personId: ID, name: string): Promise<void>;
+  saveFaceDetectionResult(
+    status: FaceDetectionStatusDTO,
+    faces: FaceDTO[],
+    people: PersonDTO[],
+  ): Promise<void>;
 }
 
 const CONCURRENCY = 3;
 const MAX_RETRIES_PER_FILE = 1;
+/** How often a paused/overheated run re-checks whether it may continue. */
+const COOLDOWN_POLL_MS = 5000;
+/** Electron thermal states at which detection backs off until the machine cools down. */
+/** After the state drops below serious, keep resting this long so the machine cools further. */
+const EXTRA_COOLDOWN_MS = 3 * 60 * 1000;
+const HOT_THERMAL_STATES = new Set(['serious', 'critical']);
+
+/** Euclidean distance below which two face descriptors are considered the same person. 0.6 is
+ * face-api.js's documented upper bound for "same person" but merges distinct people too often in
+ * practice; 0.5 trades that for occasionally splitting one person into two clusters, which a
+ * future merge feature can fix — a false merge has no such recovery path today. Not user-facing/
+ * tunable in this pass. */
+const PERSON_MATCH_THRESHOLD = 0.5;
+
+function euclideanDistance(a: number[], b: number[]): number {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) {
+    const diff = a[i] - b[i];
+    sum += diff * diff;
+  }
+  return Math.sqrt(sum);
+}
 
 /** The bundled model failed to load — permanent for the whole session, never retried per-file. */
 export class ModelLoadError extends Error {}
@@ -47,20 +76,113 @@ export class FaceDetectionStore {
   @observable totalCount = 0;
   @observable isRunning = false;
   @observable modelLoadFailed = false;
+  /** User-requested pause: workers finish their current file, then wait. */
+  @observable isPaused = false;
+  /** Last OS thermal state seen ('nominal' | 'fair' | 'serious' | 'critical' | 'unknown'). */
+  @observable thermalState = 'unknown';
+  /** Seconds detection has been backing off because of heat; 0 when not cooling down. */
+  @observable coolingSeconds = 0;
+  private coolingSince: number | undefined;
+  /** Seconds of the extra rest left after the temperature dropped; 0 when not resting. */
+  @observable restSecondsLeft = 0;
+  private restUntil: number | undefined;
+  private wasHot = false;
+  /** Whole-library progress: photos known to the app and how many of them still lack a scan. */
+  @observable libraryTotal = 0;
+  @observable unscannedCount = 0;
+  /** Set once the user asks to scan; until then files are only registered, never processed. */
+  private scanRequested = false;
+  private knownIds = new Set<ID>();
+  private readonly unscannedIds = new Set<ID>();
+  private readonly pending = new Map<ID, FileForDetection>();
 
   private readonly queue = new Map<ID, FileForDetection>();
   private readonly inFlight = new Set<ID>();
   private drainPromise: Promise<void> | undefined;
+  private peopleCache: PersonDTO[] | undefined;
+  private peopleCachePromise: Promise<PersonDTO[]> | undefined;
 
   constructor(
     private dataStorage: FaceDetectionDataStorage,
     private detectForFile: (absolutePath: string) => Promise<DetectedFace[]>,
+    private getThermalState?: () => Promise<string>,
   ) {
     makeObservable(this);
   }
 
+  @action setPaused(paused: boolean): void {
+    this.isPaused = paused;
+  }
+
+  /** True while the machine is running hot and detection is backing off. */
+  @computed get isCoolingDown(): boolean {
+    return HOT_THERMAL_STATES.has(this.thermalState);
+  }
+
+  /** Read via a computed so the polling loop (outside any reaction) doesn't trip MobX's
+   * observableRequiresReaction warning on every poll. */
+  @computed private get isBlocked(): boolean {
+    return this.isPaused || this.isCoolingDown || this.wasHot;
+  }
+
+  /** Blocks while paused by the user or while the OS reports serious/critical thermal pressure. */
+  private async waitUntilMayRun(): Promise<void> {
+    for (;;) {
+      if (this.getThermalState !== undefined) {
+        try {
+          const state = await this.getThermalState();
+          runInAction(() => {
+            this.thermalState = state;
+            const now = Date.now();
+            if (HOT_THERMAL_STATES.has(state)) {
+              this.wasHot = true;
+              this.restUntil = undefined;
+              this.restSecondsLeft = 0;
+              this.coolingSince ??= now;
+              this.coolingSeconds = Math.floor((now - this.coolingSince) / 1000);
+            } else {
+              this.coolingSince = undefined;
+              this.coolingSeconds = 0;
+              if (this.wasHot) {
+                // Dropped below serious: hold for the extra rest before letting work resume.
+                this.restUntil ??= now + EXTRA_COOLDOWN_MS;
+                if (now >= this.restUntil) {
+                  this.wasHot = false;
+                  this.restUntil = undefined;
+                  this.restSecondsLeft = 0;
+                } else {
+                  this.restSecondsLeft = Math.ceil((this.restUntil - now) / 1000);
+                }
+              }
+            }
+          });
+        } catch {
+          // thermal info is best-effort; never let it stall detection
+        }
+      }
+      if (!this.isBlocked) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, COOLDOWN_POLL_MS));
+    }
+  }
+
   async getFacesForFiles(fileIds: ID[]): Promise<FaceDTO[]> {
     return this.dataStorage.fetchFacesForFiles(fileIds);
+  }
+
+  async getAllPeople(): Promise<PersonDTO[]> {
+    return this.dataStorage.fetchAllPeople();
+  }
+
+  async renamePerson(personId: ID, name: string): Promise<void> {
+    await this.dataStorage.renamePerson(personId, name);
+    // Keep the in-memory cache used for clustering consistent with the rename, so a
+    // newly-detected face's person still shows its latest name without a full reload.
+    const cached = this.peopleCache?.find((p) => p.id === personId);
+    if (cached !== undefined) {
+      cached.name = name;
+    }
   }
 
   /**
@@ -73,40 +195,166 @@ export class FaceDetectionStore {
     if (this.modelLoadFailed) {
       return; // don't keep retrying once the model is known to be unloadable
     }
-    const candidates = files.filter((f) => !this.inFlight.has(f.id));
-    if (candidates.length > 0) {
-      const statuses = await this.dataStorage.fetchFaceDetectionStatuses(
-        candidates.map((f) => f.id),
-      );
-      const statusById = new Map(statuses.map((s) => [s.fileId, s]));
+    return this.addToQueue(await this.findNeedingDetection(files));
+  }
 
-      let added = 0;
-      for (const file of candidates) {
-        // Re-check after the await: another enqueue/drain may have picked this file up meanwhile
-        if (this.inFlight.has(file.id) || !needsDetection(file, statusById.get(file.id))) {
+  /**
+   * Scanning only runs on request: this records which of `files` still need detection (shown as
+   * "scanned x / y" in the UI) without processing them. Once `startScanning` has been called this
+   * session, newly registered files are queued straight away. With `replaceAll`, `files` is the
+   * whole library and anything no longer in it is forgotten.
+   */
+  async registerFiles(files: FileForDetection[], replaceAll = false): Promise<void> {
+    if (this.modelLoadFailed) {
+      return;
+    }
+    const needing = await this.findNeedingDetection(files);
+    const needingIds = new Set(needing.map((f) => f.id));
+    runInAction(() => {
+      if (replaceAll) {
+        this.knownIds = new Set(files.map((f) => f.id));
+        for (const id of Array.from(this.unscannedIds)) {
+          if (!this.knownIds.has(id)) {
+            this.unscannedIds.delete(id);
+            this.pending.delete(id);
+          }
+        }
+      } else {
+        files.forEach((f) => this.knownIds.add(f.id));
+      }
+      for (const file of files) {
+        if (this.queue.has(file.id) || this.inFlight.has(file.id)) {
           continue;
         }
-        if (!this.queue.has(file.id)) {
-          added += 1;
+        if (needingIds.has(file.id)) {
+          this.pending.set(file.id, file);
+          this.unscannedIds.add(file.id);
+        } else if (!this.inFlight.has(file.id)) {
+          this.pending.delete(file.id);
+          this.unscannedIds.delete(file.id);
         }
-        this.queue.set(file.id, file); // latest info wins if it was already queued
       }
-      if (added > 0) {
-        runInAction(() => {
-          if (!this.isRunning) {
-            // A fresh run: progress restarts from 0 / N
-            this.processedCount = 0;
-            this.totalCount = 0;
-            this.isRunning = true;
-          }
-          this.totalCount += added;
-        });
+      this.syncCounts();
+    });
+    if (this.scanRequested) {
+      return this.startScanning();
+    }
+  }
+
+  /** Queues everything registered so far and keeps queuing newly registered files from now on. */
+  async startScanning(): Promise<void> {
+    this.scanRequested = true;
+    const files = Array.from(this.pending.values());
+    this.pending.clear();
+    return this.addToQueue(files);
+  }
+
+  private async findNeedingDetection(files: FileForDetection[]): Promise<FileForDetection[]> {
+    const candidates = files.filter((f) => !this.inFlight.has(f.id));
+    if (candidates.length === 0) {
+      return [];
+    }
+    const statuses = await this.dataStorage.fetchFaceDetectionStatuses(candidates.map((f) => f.id));
+    const statusById = new Map(statuses.map((s) => [s.fileId, s]));
+    return candidates.filter((f) => needsDetection(f, statusById.get(f.id)));
+  }
+
+  private syncCounts(): void {
+    this.libraryTotal = Math.max(this.knownIds.size, this.unscannedIds.size);
+    this.unscannedCount = this.unscannedIds.size;
+  }
+
+  private addToQueue(files: FileForDetection[]): Promise<void> | undefined {
+    let added = 0;
+    for (const file of files) {
+      // Re-check after any await: another enqueue/drain may have picked this file up meanwhile
+      if (this.inFlight.has(file.id)) {
+        continue;
       }
+      if (!this.queue.has(file.id)) {
+        added += 1;
+      }
+      this.queue.set(file.id, file); // latest info wins if it was already queued
+      this.unscannedIds.add(file.id);
+    }
+    if (added > 0) {
+      runInAction(() => {
+        if (!this.isRunning) {
+          // A fresh run: progress restarts from 0 / N
+          this.processedCount = 0;
+          this.totalCount = 0;
+          this.isRunning = true;
+        }
+        this.totalCount += added;
+        this.syncCounts();
+      });
     }
     if (this.queue.size > 0 && !this.drainPromise && !this.modelLoadFailed) {
       this.drainPromise = this.drain();
     }
     return this.drainPromise;
+  }
+
+  /** Loads the cache once; safe to call every drain start, cheap after the first call within a
+   * session since it's just a field check. Memoizes the in-flight PROMISE (not just the resolved
+   * value): if this were `if (this.peopleCache === undefined) { this.peopleCache = await ... }`,
+   * two concurrent runners could both pass the `undefined` check before either's fetch resolves,
+   * each kick off their own `fetchAllPeople()`, and whichever resolves last would unconditionally
+   * overwrite `this.peopleCache`, discarding any Person(s) the other runner's `assignPerson` call
+   * pushed into it in the meantime — the same race `assignPerson` guards against, one level up.
+   * Assigning `this.peopleCachePromise` happens synchronously (no `await` before it), so all
+   * concurrent callers end up awaiting the identical promise instead of racing independent fetches.
+   * On rejection (e.g. a transient DB error), the promise is reset back to `undefined` so a future
+   * call retries instead of every subsequent call for the rest of this instance's lifetime
+   * `await`-ing the same already-rejected promise and throwing immediately with no way to recover. */
+  private async ensurePeopleCacheLoaded(): Promise<void> {
+    if (this.peopleCachePromise === undefined) {
+      this.peopleCachePromise = this.dataStorage.fetchAllPeople();
+    }
+    try {
+      this.peopleCache = await this.peopleCachePromise;
+    } catch (err) {
+      this.peopleCachePromise = undefined; // allow a future call to retry
+      throw err;
+    }
+  }
+
+  /**
+   * Synchronous and `await`-free by design: this is the ONLY place a new Person can be created,
+   * and it must run to completion without yielding to another concurrent runner's call, or two
+   * files processed in the same batch could both decide "no match" for the same new person and
+   * each create their own — this function's synchronous push onto `this.peopleCache` closes that
+   * window, since JS never interleaves between two synchronous statements.
+   *
+   * This alone is NOT sufficient for end-to-end race safety: it assumes `this.peopleCache` is
+   * already a single shared array that every concurrent caller reads and pushes into. That
+   * invariant depends on `ensurePeopleCacheLoaded` memoizing the in-flight fetch promise (not just
+   * the resolved value) so concurrent runners don't each populate their own independent cache
+   * snapshot — see its doc comment for that half of the fix.
+   */
+  private assignPerson(descriptor: number[]): PersonDTO {
+    const cache = this.peopleCache;
+    if (cache === undefined) {
+      throw new Error('assignPerson called before ensurePeopleCacheLoaded');
+    }
+    let best: { person: PersonDTO; distance: number } | undefined;
+    for (const person of cache) {
+      const distance = euclideanDistance(descriptor, person.representativeDescriptor);
+      if (best === undefined || distance < best.distance) {
+        best = { person, distance };
+      }
+    }
+    if (best !== undefined && best.distance < PERSON_MATCH_THRESHOLD) {
+      return best.person;
+    }
+    const newPerson: PersonDTO = {
+      id: generateId(),
+      name: '',
+      representativeDescriptor: descriptor,
+      dateCreated: new Date(),
+    };
+    cache.push(newPerson); // synchronous — visible to the next assignPerson call immediately
+    return newPerson;
   }
 
   private takeNext(): FileForDetection | undefined {
@@ -121,7 +369,12 @@ export class FaceDetectionStore {
 
   private async drain(): Promise<void> {
     const runner = async () => {
-      for (let file = this.takeNext(); file !== undefined; file = this.takeNext()) {
+      for (;;) {
+        await this.waitUntilMayRun();
+        const file = this.takeNext();
+        if (file === undefined) {
+          break;
+        }
         try {
           await this.processFile(file);
         } finally {
@@ -175,16 +428,31 @@ export class FaceDetectionStore {
     }
 
     try {
-      await this.dataStorage.saveFaceDetectionResult(
-        { fileId: file.id, status, dateDetected: startedAt },
-        faces.map((f) => ({
+      await this.ensurePeopleCacheLoaded();
+      // EVERY person the faces reference, not just the ones created just now: the backend
+      // inserts whichever of them it no longer has (and leaves existing rows untouched). The cache
+      // is never refreshed mid-session, so it can hold people the backend has since pruned
+      // (their last photo removed/re-detected elsewhere), or a person created for an earlier file
+      // whose save then failed. Re-sending them makes each save self-healing — the person row is
+      // recreated alongside the face that references it — instead of the face silently pointing
+      // at a person that doesn't exist (invisible in the People view, never re-clustered).
+      const referencedPeople = new Map<ID, PersonDTO>();
+      const faceDTOs: FaceDTO[] = faces.map((f) => {
+        const person = this.assignPerson(f.descriptor);
+        referencedPeople.set(person.id, person);
+        return {
           id: generateId(),
           fileId: file.id,
           boundingBox: f.boundingBox,
           descriptor: f.descriptor,
-          personId: null,
+          personId: person.id,
           dateDetected: startedAt,
-        })),
+        };
+      });
+      await this.dataStorage.saveFaceDetectionResult(
+        { fileId: file.id, status, dateDetected: startedAt },
+        faceDTOs,
+        Array.from(referencedPeople.values()),
       );
     } catch (err) {
       // e.g. the file was removed from the DB meanwhile; don't let it stall the queue
@@ -192,6 +460,8 @@ export class FaceDetectionStore {
     }
     runInAction(() => {
       this.processedCount += 1;
+      this.unscannedIds.delete(file.id);
+      this.syncCounts();
     });
   }
 }

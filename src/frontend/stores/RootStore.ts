@@ -55,8 +55,10 @@ class RootStore {
     this.locationStore = new LocationStore(backend, this);
     this.uiStore = new UiStore(this);
     this.searchStore = new SearchStore(backend, this);
-    this.faceDetectionStore = new FaceDetectionStore(backend, (absolutePath) =>
-      detectFacesUsingWorker(absolutePath),
+    this.faceDetectionStore = new FaceDetectionStore(
+      backend,
+      (absolutePath) => detectFacesUsingWorker(absolutePath),
+      () => RendererMessenger.getThermalState(),
     );
     this.#backend = backend;
     this.#backup = backup;

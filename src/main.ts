@@ -6,6 +6,7 @@ import {
   Menu,
   nativeImage,
   nativeTheme,
+  powerMonitor,
   screen,
   session,
   shell,
@@ -694,6 +695,8 @@ MainMessenger.onMessageBoxSync(dialog);
 MainMessenger.onGetPath((path) => app.getPath(path));
 
 MainMessenger.onTrashFile((absolutePath) => shell.trashItem(absolutePath));
+
+MainMessenger.onGetThermalState(() => powerMonitor.getCurrentThermalState());
 
 MainMessenger.onIsFullScreen(() => mainWindow?.isFullScreen() ?? false);
 

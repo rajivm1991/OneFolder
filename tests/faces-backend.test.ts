@@ -61,7 +61,7 @@ describe('Backend face detection API', () => {
 
   test('saveFaceDetectionResult then fetchFacesForFile round-trips a face', async (backend) => {
     const face = mockFace();
-    await backend.saveFaceDetectionResult(mockStatus(), [face]);
+    await backend.saveFaceDetectionResult(mockStatus(), [face], []);
     const faces = await backend.fetchFacesForFile('file-1');
     expect(faces).toHaveLength(1);
     expect(faces[0]).toEqual(face);
@@ -72,16 +72,20 @@ describe('Backend face detection API', () => {
   });
 
   test('stores multiple faces for the same file (crowd photo)', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus(), [
-      mockFace({ id: 'face-1' }),
-      mockFace({ id: 'face-2', boundingBox: { x: 0.5, y: 0, width: 0.2, height: 0.2 } }),
-    ]);
+    await backend.saveFaceDetectionResult(
+      mockStatus(),
+      [
+        mockFace({ id: 'face-1' }),
+        mockFace({ id: 'face-2', boundingBox: { x: 0.5, y: 0, width: 0.2, height: 0.2 } }),
+      ],
+      [],
+    );
     const faces = await backend.fetchFacesForFile('file-1');
     expect(faces.map((f) => f.id).sort()).toEqual(['face-1', 'face-2']);
   });
 
   test('a 0-face result still records a status, so the file counts as processed', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'no-faces' }), []);
+    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'no-faces' }), [], []);
     expect(await backend.fetchFacesForFile('no-faces')).toEqual([]);
     expect(await backend.fetchFaceDetectionStatuses(['no-faces'])).toEqual([
       mockStatus({ fileId: 'no-faces' }),
@@ -89,26 +93,29 @@ describe('Backend face detection API', () => {
   });
 
   test('a failed attempt is recorded with status "failed"', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'bad', status: 'failed' }), []);
+    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'bad', status: 'failed' }), [], []);
     const [status] = await backend.fetchFaceDetectionStatuses(['bad']);
     expect(status.status).toBe('failed');
   });
 
   test('fetchFaceDetectionStatuses omits files never attempted', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'a' }), []);
+    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'a' }), [], []);
     const statuses = await backend.fetchFaceDetectionStatuses(['a', 'never-attempted']);
     expect(statuses.map((s) => s.fileId)).toEqual(['a']);
   });
 
   test('re-detecting a file replaces its stale faces and updates its status', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus(), [
-      mockFace({ id: 'old-1' }),
-      mockFace({ id: 'old-2' }),
-    ]);
+    await backend.saveFaceDetectionResult(
+      mockStatus(),
+      [mockFace({ id: 'old-1' }), mockFace({ id: 'old-2' })],
+      [],
+    );
     const later = new Date('2026-09-28T00:00:00.000Z');
-    await backend.saveFaceDetectionResult(mockStatus({ dateDetected: later }), [
-      mockFace({ id: 'new-1', dateDetected: later }),
-    ]);
+    await backend.saveFaceDetectionResult(
+      mockStatus({ dateDetected: later }),
+      [mockFace({ id: 'new-1', dateDetected: later })],
+      [],
+    );
     const faces = await backend.fetchFacesForFile('file-1');
     expect(faces.map((f) => f.id)).toEqual(['new-1']);
     const [status] = await backend.fetchFaceDetectionStatuses(['file-1']);
@@ -116,27 +123,37 @@ describe('Backend face detection API', () => {
   });
 
   test('fetchFacesForFiles fetches the faces of several files in one call', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'a' }), [
-      mockFace({ id: 'fa', fileId: 'a' }),
-    ]);
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'b' }), [
-      mockFace({ id: 'fb', fileId: 'b' }),
-    ]);
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'c' }), [
-      mockFace({ id: 'fc', fileId: 'c' }),
-    ]);
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'a' }),
+      [mockFace({ id: 'fa', fileId: 'a' })],
+      [],
+    );
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'b' }),
+      [mockFace({ id: 'fb', fileId: 'b' })],
+      [],
+    );
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'c' }),
+      [mockFace({ id: 'fc', fileId: 'c' })],
+      [],
+    );
     const faces = await backend.fetchFacesForFiles(['a', 'c']);
     expect(faces.map((f) => f.id).sort()).toEqual(['fa', 'fc']);
   });
 
   test("removeFiles also removes those files' faces and statuses", async (backend) => {
     await backend.createFilesFromPath('/loc-L', [mockFile('a', 'L'), mockFile('b', 'L')]);
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'a' }), [
-      mockFace({ id: 'fa', fileId: 'a' }),
-    ]);
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'b' }), [
-      mockFace({ id: 'fb', fileId: 'b' }),
-    ]);
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'a' }),
+      [mockFace({ id: 'fa', fileId: 'a' })],
+      [],
+    );
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'b' }),
+      [mockFace({ id: 'fb', fileId: 'b' })],
+      [],
+    );
 
     await backend.removeFiles(['a']);
 
@@ -156,12 +173,16 @@ describe('Backend face detection API', () => {
     } as any);
     await backend.createFilesFromPath('/loc-L', [mockFile('a', 'L')]);
     await backend.createFilesFromPath('/loc-M', [mockFile('m', 'M')]);
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'a' }), [
-      mockFace({ id: 'fa', fileId: 'a' }),
-    ]);
-    await backend.saveFaceDetectionResult(mockStatus({ fileId: 'm' }), [
-      mockFace({ id: 'fm', fileId: 'm' }),
-    ]);
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'a' }),
+      [mockFace({ id: 'fa', fileId: 'a' })],
+      [],
+    );
+    await backend.saveFaceDetectionResult(
+      mockStatus({ fileId: 'm' }),
+      [mockFace({ id: 'fm', fileId: 'm' })],
+      [],
+    );
 
     await backend.removeLocation('L');
 
@@ -173,7 +194,7 @@ describe('Backend face detection API', () => {
   });
 
   test('clearFilesOnly clears faces and statuses', async (backend) => {
-    await backend.saveFaceDetectionResult(mockStatus(), [mockFace()]);
+    await backend.saveFaceDetectionResult(mockStatus(), [mockFace()], []);
     await backend.clearFilesOnly();
     expect(await backend.fetchFacesForFile('file-1')).toEqual([]);
     expect(await backend.fetchFaceDetectionStatuses(['file-1'])).toEqual([]);

@@ -42,6 +42,7 @@ import {
   SYSTEM_PATHS,
   TOGGLE_CHECK_UPDATES_ON_STARTUP,
   TOGGLE_DEV_TOOLS,
+  GET_THERMAL_STATE,
   TRASH_FILE,
   WindowSystemButtonPress,
   WINDOW_BLUR,
@@ -75,6 +76,8 @@ export class RendererMessenger {
 
   static trashFile = (absolutePath: string): Promise<Error | undefined> =>
     ipcRenderer.invoke(TRASH_FILE, absolutePath);
+
+  static getThermalState = (): Promise<string> => ipcRenderer.invoke(GET_THERMAL_STATE);
 
   static setFullScreen = (isFullScreen: boolean) =>
     ipcRenderer.invoke(SET_FULL_SCREEN, isFullScreen);

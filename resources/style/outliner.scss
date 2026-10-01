@@ -218,6 +218,12 @@
   display: flex;
   overflow-x: auto; /* Allows horizontal scrolling if needed */
   white-space: nowrap; /* Prevents text wrapping */
+  // The multi-split container scrolls when the last panel is taller than it (e.g. a long location list); keep the buttons in view
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex-shrink: 0;
+  background: var(--background-color-alt);
 }
 
 .navigation-button {

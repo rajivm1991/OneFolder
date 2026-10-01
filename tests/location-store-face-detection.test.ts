@@ -6,6 +6,8 @@ describe('LocationStore + FaceDetectionStore integration contract', () => {
     const dataStorage = {
       fetchFacesForFiles: async () => [],
       fetchFaceDetectionStatuses: async () => [],
+      fetchAllPeople: async () => [],
+      renamePerson: async () => {},
       saveFaceDetectionResult: async () => {},
     };
     const detectForFile = jest.fn(async () => []);

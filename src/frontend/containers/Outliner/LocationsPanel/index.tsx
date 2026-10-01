@@ -26,6 +26,7 @@ import TreeItemRevealer from '../TreeItemRevealer';
 import { triggerContextMenuEvent } from '../utils';
 import LocationCreationDialog from './LocationCreationDialog';
 import LocationRecoveryDialog from './LocationRecoveryDialog';
+import RescanDialog, { RescanResult } from './RescanDialog';
 import { onDragOver as onDragOverFileDnD } from './dnd';
 import { useFileDropHandling } from './useFileDnD';
 
@@ -83,6 +84,7 @@ interface ITreeData {
   setExpansion: React.Dispatch<IExpansionState>;
   delete: (location: ClientLocation) => void;
   exclude: (subLocation: ClientSubLocation) => void;
+  rescan: (folder: ClientLocation | ClientSubLocation) => void;
   selectedIds: Set<string>;
 }
 
@@ -142,9 +144,11 @@ const DirectoryMenu = observer(
   ({
     location,
     onExclude,
+    onRescan,
   }: {
     location: ClientLocation | ClientSubLocation;
     onExclude: (subLocation: ClientSubLocation) => void;
+    onRescan: (folder: ClientLocation | ClientSubLocation) => void;
   }) => {
     const { uiStore } = useStore();
 
@@ -179,6 +183,7 @@ const DirectoryMenu = observer(
             icon={!location.isExcluded ? IconSet.HIDDEN : IconSet.PREVIEW}
           />
         )}
+        <MenuItem onClick={() => onRescan(location)} text="Re-scan" icon={IconSet.RELOAD_COMPACT} />
         <MenuItem
           onClick={handleOpenFileExplorer}
           text="Open in File Browser"
@@ -193,34 +198,37 @@ interface IContextMenuProps {
   location: ClientLocation;
   onDelete: (location: ClientLocation) => void;
   onExclude: (location: ClientSubLocation) => void;
+  onRescan: (folder: ClientLocation | ClientSubLocation) => void;
 }
 
-const LocationTreeContextMenu = observer(({ location, onDelete, onExclude }: IContextMenuProps) => {
-  const { uiStore } = useStore();
+const LocationTreeContextMenu = observer(
+  ({ location, onDelete, onExclude, onRescan }: IContextMenuProps) => {
+    const { uiStore } = useStore();
 
-  const openDeleteDialog = useCallback(() => onDelete(location), [location, onDelete]);
+    const openDeleteDialog = useCallback(() => onDelete(location), [location, onDelete]);
 
-  if (location.isBroken) {
+    if (location.isBroken) {
+      return (
+        <Menu>
+          <MenuItem
+            text="Open Recovery Panel"
+            onClick={() => uiStore.openLocationRecovery(location.id)}
+            icon={IconSet.WARNING_BROKEN_LINK}
+          />
+          <MenuItem text="Delete" onClick={openDeleteDialog} icon={IconSet.DELETE} />
+        </Menu>
+      );
+    }
+
     return (
       <Menu>
-        <MenuItem
-          text="Open Recovery Panel"
-          onClick={() => uiStore.openLocationRecovery(location.id)}
-          icon={IconSet.WARNING_BROKEN_LINK}
-        />
+        <DirectoryMenu location={location} onExclude={onExclude} onRescan={onRescan} />
+        <MenuDivider />
         <MenuItem text="Delete" onClick={openDeleteDialog} icon={IconSet.DELETE} />
       </Menu>
     );
-  }
-
-  return (
-    <Menu>
-      <DirectoryMenu location={location} onExclude={onExclude} />
-      <MenuDivider />
-      <MenuItem text="Delete" onClick={openDeleteDialog} icon={IconSet.DELETE} />
-    </Menu>
-  );
-});
+  },
+);
 
 const SubLocation = observer((props: { nodeData: ClientSubLocation; treeData: ITreeData }) => {
   const { nodeData, treeData } = props;
@@ -233,10 +241,14 @@ const SubLocation = observer((props: { nodeData: ClientSubLocation; treeData: IT
         e.clientX,
         e.clientY,
         <Menu>
-          <DirectoryMenu location={nodeData} onExclude={treeData.exclude} />
+          <DirectoryMenu
+            location={nodeData}
+            onExclude={treeData.exclude}
+            onRescan={treeData.rescan}
+          />
         </Menu>,
       ),
-    [nodeData, show, treeData.exclude],
+    [nodeData, show, treeData.exclude, treeData.rescan],
   );
 
   const existingSearchCrit = uiStore.searchCriteriaList.find(
@@ -309,10 +321,11 @@ const Location = observer(
             location={nodeData}
             onDelete={onDelete}
             onExclude={treeData.exclude}
+            onRescan={treeData.rescan}
           />,
         );
       },
-      [show, nodeData, onDelete, treeData.exclude],
+      [show, nodeData, onDelete, treeData.exclude, treeData.rescan],
     );
 
     // TODO: idem
@@ -320,21 +333,21 @@ const Location = observer(
       (c: any) => c.value === pathAsSearchPath(nodeData.path),
     );
 
-  const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
-      if (existingSearchCrit) {
-        uiStore.removeSearchCriteria(existingSearchCrit);
-        uiStore.deselectLocation(nodeData);
-      } else if (event.ctrlKey) {
-        uiStore.addSearchCriteria(pathCriteria(nodeData.path));
-        uiStore.selectLocation(nodeData);
-      } else {
-        uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
-        uiStore.selectLocation(nodeData, true);
-      }
-    },
-    [existingSearchCrit, nodeData, uiStore],
-  );
+    const handleClick = useCallback(
+      (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
+        if (existingSearchCrit) {
+          uiStore.removeSearchCriteria(existingSearchCrit);
+          uiStore.deselectLocation(nodeData);
+        } else if (event.ctrlKey) {
+          uiStore.addSearchCriteria(pathCriteria(nodeData.path));
+          uiStore.selectLocation(nodeData);
+        } else {
+          uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
+          uiStore.selectLocation(nodeData, true);
+        }
+      },
+      [existingSearchCrit, nodeData, uiStore],
+    );
 
     const fileDnD = useFileDropHandling(
       nodeData.id,
@@ -451,15 +464,14 @@ const LocationLabel = ({ nodeData, treeData }: { nodeData: any; treeData: any })
 interface ILocationTreeProps {
   onDelete: (loc: ClientLocation) => void;
   onExclude: (loc: ClientSubLocation) => void;
+  onRescan: (folder: ClientLocation | ClientSubLocation) => void;
 }
 
-const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
+const LocationsTree = observer(({ onDelete, onExclude, onRescan }: ILocationTreeProps) => {
   const { locationStore, uiStore } = useStore();
   const [expansion, setExpansion] = useState<IExpansionState>({});
-  const selectedIds = useMemo(
-    () => new Set(uiStore.locationSelection),
-    [uiStore.locationSelection],
-  );
+  // Not memoized on the observable set: its reference never changes, so the copy would go stale
+  const selectedIds = new Set(uiStore.locationSelection);
 
   const treeData: ITreeData = useMemo<ITreeData>(
     () => ({
@@ -467,9 +479,10 @@ const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
       setExpansion,
       delete: onDelete,
       exclude: onExclude,
+      rescan: onRescan,
       selectedIds,
     }),
-    [expansion, onDelete, onExclude, selectedIds],
+    [expansion, onDelete, onExclude, onRescan, selectedIds],
   );
   const [branches, setBranches] = useState<ITreeItem[]>([]);
 
@@ -520,7 +533,7 @@ const LocationsTree = ({ onDelete, onExclude }: ILocationTreeProps) => {
       onBranchKeyDown={handleBranchKeyDown}
     />
   );
-};
+});
 
 const LocationsPanel = observer((props: Partial<MultiSplitPaneProps>) => {
   const { locationStore } = useStore();
@@ -528,6 +541,36 @@ const LocationsPanel = observer((props: Partial<MultiSplitPaneProps>) => {
   const [creatableLocation, setCreatableLocation] = useState<ClientLocation>();
   const [deletableLocation, setDeletableLocation] = useState<ClientLocation>();
   const [excludableSubLocation, setExcludableSubLocation] = useState<ClientSubLocation>();
+  const [rescanResult, setRescanResult] = useState<RescanResult>();
+
+  const handleRescan = useCallback(
+    async (folder: ClientLocation | ClientSubLocation) => {
+      const location = folder instanceof ClientLocation ? folder : folder.location;
+      AppToaster.show({ message: `Re-scanning "${folder.name}"...`, timeout: 0 }, 'rescan');
+      try {
+        const res = await locationStore.findMissingFilesInFolder(location, folder.path);
+        if (!res) {
+          AppToaster.show(
+            {
+              message: `Cannot find Location "${location.name}", is the drive connected?`,
+              timeout: 8000,
+            },
+            'rescan',
+          );
+          return;
+        }
+        AppToaster.dismiss('rescan');
+        setRescanResult({ folderName: folder.name, folderPath: folder.path, ...res });
+      } catch (e) {
+        console.error('Re-scan failed', e);
+        AppToaster.show(
+          { message: 'Re-scan failed, see console for details.', timeout: 8000 },
+          'rescan',
+        );
+      }
+    },
+    [locationStore],
+  );
 
   // TODO: Offer option to replace child location(s) with the parent loc, so no data of imported images is lost
   const handleChooseWatchedDir = useCallback(async () => {
@@ -621,7 +664,11 @@ const LocationsPanel = observer((props: Partial<MultiSplitPaneProps>) => {
       }
       {...props}
     >
-      <LocationsTree onDelete={setDeletableLocation} onExclude={setExcludableSubLocation} />
+      <LocationsTree
+        onDelete={setDeletableLocation}
+        onExclude={setExcludableSubLocation}
+        onRescan={handleRescan}
+      />
       {isEmpty && (
         <button onClick={handleChooseWatchedDir} className="add-location-button">
           {IconSet.PLUS}
@@ -630,6 +677,14 @@ const LocationsPanel = observer((props: Partial<MultiSplitPaneProps>) => {
       )}
 
       <LocationRecoveryDialog />
+
+      {rescanResult && (
+        <RescanDialog
+          result={rescanResult}
+          onRemove={(ids) => locationStore.removeFilesFromLibrary(ids)}
+          onClose={() => setRescanResult(undefined)}
+        />
+      )}
 
       {creatableLocation && (
         <LocationCreationDialog

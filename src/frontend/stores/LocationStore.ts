@@ -91,10 +91,11 @@ class LocationStore {
     this.backend.saveLocation(loc);
   }
 
-  /** Fire-and-forget: hands files to the face detection queue, which skips already-detected ones */
-  private enqueueFaceDetection(files: FileDTO[]): void {
+  /** Fire-and-forget: tells the face detection store about files. Scanning itself only starts when
+   * the user asks for it (or already did this session). `replaceAll`: `files` is the whole library. */
+  private enqueueFaceDetection(files: FileDTO[], replaceAll = false): void {
     this.rootStore.faceDetectionStore
-      .enqueueFiles(files)
+      .registerFiles(files, replaceAll)
       .catch((err) => console.error('Face detection failed', err));
   }
 
@@ -336,7 +337,10 @@ class LocationStore {
     // location is unreachable or that are missing from disk are left out, so they aren't recorded
     // as failed while temporarily unavailable.
     const libraryFiles = await this.backend.fetchFiles('id', OrderDirection.Asc);
-    this.enqueueFaceDetection(libraryFiles.filter((f) => pathsOnDisk.has(f.absolutePath)));
+    this.enqueueFaceDetection(
+      libraryFiles.filter((f) => pathsOnDisk.has(f.absolutePath)),
+      true,
+    );
 
     if (foundNewFiles) {
       AppToaster.show({ message: 'New images detected.', timeout: 5000 }, progressToastKey);
@@ -592,6 +596,34 @@ class LocationStore {
   @action async findLocationFiles(locationId: ID): Promise<FileDTO[]> {
     const crit = new ClientStringSearchCriteria('locationId', locationId, 'equals').toCondition();
     return this.backend.searchFiles(crit, 'id', OrderDirection.Asc);
+  }
+
+  /**
+   * Checks which indexed files under `folderPath` no longer exist on disk. Does not modify anything: the caller decides what to do with them.
+   * Returns undefined when the location root itself is unreachable (e.g. an unmounted drive), since then every file would look deleted.
+   */
+  @action async findMissingFilesInFolder(
+    location: ClientLocation,
+    folderPath: string,
+  ): Promise<{ checked: number; missing: FileDTO[] } | undefined> {
+    if (!(await fse.pathExists(location.path))) {
+      return undefined;
+    }
+    const locFiles = await this.findLocationFiles(location.id);
+    const prefix = folderPath.endsWith(SysPath.sep) ? folderPath : folderPath + SysPath.sep;
+    const folderFiles = locFiles.filter((f) => f.absolutePath.startsWith(prefix));
+    const exists = await promiseAllLimit(
+      folderFiles.map((f) => () => fse.pathExists(f.absolutePath)),
+      50,
+    );
+    return { checked: folderFiles.length, missing: folderFiles.filter((_, i) => !exists[i]) };
+  }
+
+  /** Removes the given files from the library (not from disk) and refreshes the views */
+  @action async removeFilesFromLibrary(ids: ID[]): Promise<void> {
+    await this.backend.removeFiles(ids);
+    await this.rootStore.fileStore.refetch();
+    await this.rootStore.fileStore.refetchFileCounts();
   }
 
   @action async removeSublocationFiles(subLoc: ClientSubLocation): Promise<void> {

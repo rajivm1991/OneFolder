@@ -42,6 +42,7 @@ import {
   SYSTEM_PATHS,
   TOGGLE_CHECK_UPDATES_ON_STARTUP,
   TOGGLE_DEV_TOOLS,
+  GET_THERMAL_STATE,
   TRASH_FILE,
   WindowSystemButtonPress,
   WINDOW_BLUR,
@@ -92,6 +93,8 @@ export class MainMessenger {
         return e;
       }
     });
+
+  static onGetThermalState = (cb: () => string) => ipcMain.handle(GET_THERMAL_STATE, () => cb());
 
   static onSetFullScreen = (cb: (isFullScreen: boolean) => void) =>
     ipcMain.handle(SET_FULL_SCREEN, (_, isFullScreen) => cb(isFullScreen));
