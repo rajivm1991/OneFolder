@@ -7,7 +7,7 @@ import { getThumbnailSize } from './utils';
 import { useStore } from '../../contexts/StoreContext';
 import { ClientFile } from '../../entities/File';
 import { Thumbnail, ThumbnailTags } from './GalleryItem';
-import { CommandDispatcher, useCommandHandler } from './Commands';
+import { CommandDispatcher } from './Commands';
 import { IconButton, IconSet } from 'widgets';
 import { OrderDirection } from 'src/api/data-storage-search';
 import { comboMatches, getKeyCombo, parseKeyCombo } from '../../hotkeyParser';
@@ -636,8 +636,8 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
 
   // Navigation state no longer needed - each header shows its own month/year
 
-  // Enable command handler for context menu functionality
-  useCommandHandler(select);
+  // Note: no useCommandHandler here. LayoutSwitcher already registers it on window for every view, and registering it
+  // twice runs each select command twice, so cmd+click toggled a file on and straight back off.
 
   const {
     groups,
