@@ -1,7 +1,8 @@
 import {
   chunkIntoRows,
   computeColumns,
-  getArrowTarget,
+  calendarSortFixes,
+  getGridArrowTarget,
   rowStartIndex,
 } from '../src/frontend/containers/ContentView/calendar-utils';
 
@@ -61,26 +62,72 @@ describe('rowStartIndex', () => {
   });
 });
 
-describe('getArrowTarget', () => {
-  it('moves by columns for ArrowDown / ArrowUp', () => {
-    expect(getArrowTarget(1, 20, 'ArrowDown', 4)).toBe(5);
-    expect(getArrowTarget(9, 20, 'ArrowUp', 4)).toBe(5);
+describe('getGridArrowTarget', () => {
+  // 4 columns. Month A: 5 files (rows [0-3], [4]); month B: 6 files (rows [5-8], [9-10])
+  const groups = [5, 6];
+
+  it('moves to the same column in the next row of the same month', () => {
+    expect(getGridArrowTarget(groups, 5, 'ArrowDown', 4)).toBe(9);
+    expect(getGridArrowTarget(groups, 6, 'ArrowDown', 4)).toBe(10);
   });
 
-  it('moves by 1 when columns is 1 (list mode)', () => {
-    expect(getArrowTarget(3, 10, 'ArrowDown', 1)).toBe(4);
-    expect(getArrowTarget(3, 10, 'ArrowUp', 1)).toBe(2);
+  it('clamps to the end of a partial row', () => {
+    expect(getGridArrowTarget(groups, 1, 'ArrowDown', 4)).toBe(4);
+    expect(getGridArrowTarget(groups, 3, 'ArrowDown', 4)).toBe(4);
+    expect(getGridArrowTarget(groups, 8, 'ArrowDown', 4)).toBe(10);
   });
 
-  it('stays put (undefined) when the move would leave the list', () => {
-    expect(getArrowTarget(0, 10, 'ArrowUp', 1)).toBeUndefined();
-    expect(getArrowTarget(9, 10, 'ArrowDown', 1)).toBeUndefined();
-    expect(getArrowTarget(2, 10, 'ArrowUp', 4)).toBeUndefined();
-    expect(getArrowTarget(8, 10, 'ArrowDown', 4)).toBeUndefined();
+  it('crosses into the first row of the next month, keeping the column', () => {
+    expect(getGridArrowTarget(groups, 4, 'ArrowDown', 4)).toBe(5);
+    expect(getGridArrowTarget([4, 6], 3, 'ArrowDown', 4)).toBe(7);
   });
 
-  it('ignores other keys', () => {
-    expect(getArrowTarget(3, 10, 'ArrowLeft', 4)).toBeUndefined();
-    expect(getArrowTarget(3, 10, 'a', 4)).toBeUndefined();
+  it('moves up to the same column in the previous row', () => {
+    expect(getGridArrowTarget(groups, 10, 'ArrowUp', 4)).toBe(6);
+    expect(getGridArrowTarget(groups, 9, 'ArrowUp', 4)).toBe(5);
+  });
+
+  it('crosses into the last row of the previous month, clamping the column', () => {
+    expect(getGridArrowTarget(groups, 5, 'ArrowUp', 4)).toBe(4);
+    expect(getGridArrowTarget(groups, 7, 'ArrowUp', 4)).toBe(4);
+    expect(getGridArrowTarget([4, 6], 7, 'ArrowUp', 4)).toBe(3);
+  });
+
+  it('stays put (undefined) at the first and last row', () => {
+    expect(getGridArrowTarget(groups, 0, 'ArrowUp', 4)).toBeUndefined();
+    expect(getGridArrowTarget(groups, 2, 'ArrowUp', 4)).toBeUndefined();
+    expect(getGridArrowTarget(groups, 10, 'ArrowDown', 4)).toBeUndefined();
+    expect(getGridArrowTarget(groups, 9, 'ArrowDown', 4)).toBeUndefined();
+  });
+
+  it('moves one file at a time across months when columns is 1 (list mode)', () => {
+    expect(getGridArrowTarget([2, 3], 0, 'ArrowDown', 1)).toBe(1);
+    expect(getGridArrowTarget([2, 3], 1, 'ArrowDown', 1)).toBe(2);
+    expect(getGridArrowTarget([2, 3], 2, 'ArrowUp', 1)).toBe(1);
+  });
+
+  it('ignores other keys and out-of-range positions', () => {
+    expect(getGridArrowTarget(groups, 3, 'ArrowLeft', 4)).toBeUndefined();
+    expect(getGridArrowTarget(groups, 99, 'ArrowDown', 4)).toBeUndefined();
+    expect(getGridArrowTarget(groups, -1, 'ArrowDown', 4)).toBeUndefined();
+    expect(getGridArrowTarget([], 0, 'ArrowDown', 4)).toBeUndefined();
+  });
+});
+
+describe('calendarSortFixes', () => {
+  it('needs nothing when already sorted by date created, newest first', () => {
+    expect(calendarSortFixes('dateCreated', true)).toEqual([]);
+  });
+
+  it('switches to date created when sorted by something else', () => {
+    expect(calendarSortFixes('dateAdded', true)).toEqual(['orderByDateCreated']);
+  });
+
+  it('flips an ascending direction', () => {
+    expect(calendarSortFixes('dateCreated', false)).toEqual(['switchDirection']);
+  });
+
+  it('fixes both, ordering first', () => {
+    expect(calendarSortFixes('name', false)).toEqual(['orderByDateCreated', 'switchDirection']);
   });
 });

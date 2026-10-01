@@ -27,21 +27,73 @@ export function rowStartIndex(groupSizes: number[], groupIndex: number, columns:
 }
 
 /**
- * New position in a flat list of `total` items after an ArrowUp/ArrowDown press, moving by `columns`
- * (use 1 for a plain list). Returns undefined if the key is not handled or the move would leave the list.
+ * New position in a flat, month-grouped list after an ArrowUp/ArrowDown press. Every month starts a new row, so
+ * stepping by `columns` through the flat list would drift diagonally at month boundaries. Instead this keeps the
+ * column, clamping to the end of a partial row, and crosses into the first/last row of the neighbouring month.
+ * Use `columns` = 1 for a plain list. Returns undefined if the key is not handled or there is no row to move to.
  */
-export function getArrowTarget(
+export function getGridArrowTarget(
+  groupSizes: number[],
   position: number,
-  total: number,
   key: string,
   columns: number,
 ): number | undefined {
+  if (key !== 'ArrowUp' && key !== 'ArrowDown') {
+    return undefined;
+  }
   const step = Math.max(1, Math.floor(columns));
-  if (key === 'ArrowUp' && position - step >= 0) {
-    return position - step;
+
+  let group = 0;
+  let start = 0;
+  while (group < groupSizes.length && position >= start + groupSizes[group]) {
+    start += groupSizes[group];
+    group++;
   }
-  if (key === 'ArrowDown' && position + step <= total - 1) {
-    return position + step;
+  if (position < 0 || group >= groupSizes.length) {
+    return undefined;
   }
-  return undefined;
+
+  const size = groupSizes[group];
+  const offset = position - start;
+  const row = Math.floor(offset / step);
+  const col = offset % step;
+  const rowCount = Math.ceil(size / step);
+
+  if (key === 'ArrowDown') {
+    if (row + 1 < rowCount) {
+      return start + Math.min((row + 1) * step + col, size - 1);
+    }
+    if (group + 1 >= groupSizes.length) {
+      return undefined;
+    }
+    return start + size + Math.min(col, groupSizes[group + 1] - 1);
+  }
+
+  if (row > 0) {
+    return start + (row - 1) * step + col;
+  }
+  if (group === 0) {
+    return undefined;
+  }
+  const prevSize = groupSizes[group - 1];
+  const prevStart = start - prevSize;
+  const prevLastRow = Math.ceil(prevSize / step) - 1;
+  return prevStart + Math.min(prevLastRow * step + col, prevSize - 1);
+}
+
+export type CalendarSortFix = 'orderByDateCreated' | 'switchDirection';
+
+/**
+ * The calendar view groups files by month, newest first, and keyboard/range selection walks the file list in its
+ * sort order. Both only agree when the list is sorted by date created, descending. Returns what to change, in order.
+ */
+export function calendarSortFixes(orderBy: string, isDescending: boolean): CalendarSortFix[] {
+  const fixes: CalendarSortFix[] = [];
+  if (orderBy !== 'dateCreated') {
+    fixes.push('orderByDateCreated');
+  }
+  if (!isDescending) {
+    fixes.push('switchDirection');
+  }
+  return fixes;
 }

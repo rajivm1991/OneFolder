@@ -9,7 +9,14 @@ import { ClientFile } from '../../entities/File';
 import { Thumbnail, ThumbnailTags } from './GalleryItem';
 import { CommandDispatcher, useCommandHandler } from './Commands';
 import { IconButton, IconSet } from 'widgets';
-import { chunkIntoRows, computeColumns, getArrowTarget, rowStartIndex } from './calendar-utils';
+import { OrderDirection } from 'src/api/data-storage-search';
+import {
+  calendarSortFixes,
+  chunkIntoRows,
+  computeColumns,
+  getGridArrowTarget,
+  rowStartIndex,
+} from './calendar-utils';
 // Using HTML select elements for better compatibility
 
 // Helper function to create month/year key from date
@@ -189,6 +196,20 @@ const PortalDropdown = ({
   );
 };
 
+const arrowButtonStyle = (disabled: boolean, color: string): React.CSSProperties => ({
+  border: 'none',
+  background: 'transparent',
+  fontSize: '20px',
+  lineHeight: 1,
+  fontWeight: 600,
+  width: '28px',
+  height: '28px',
+  borderRadius: '4px',
+  color,
+  cursor: disabled ? 'default' : 'pointer',
+  opacity: disabled ? 0.3 : 1,
+});
+
 // Navigation header component with year/month buttons that toggle dropdowns
 const NavigationHeader = observer(
   ({
@@ -201,6 +222,7 @@ const NavigationHeader = observer(
     getMonthPhotoCount,
     onYearChange,
     onMonthChange,
+    onGroupJump,
   }: {
     groupIndex: number;
     groups: Array<{ key: string; name: string; files: ClientFile[]; groupIndex: number }>;
@@ -210,7 +232,9 @@ const NavigationHeader = observer(
     getYearPhotoCount: (year: number) => number;
     getMonthPhotoCount: (year: number, month: number) => number;
     onYearChange: (year: number) => void;
-    onMonthChange: (month: number) => void;
+    onMonthChange: (year: number, month: number) => void;
+    /** Scroll to the start of the month group with this index (groups are ordered newest first) */
+    onGroupJump: (groupIndex: number) => void;
   }) => {
     const { uiStore } = useStore();
     const group = groups[groupIndex];
@@ -377,7 +401,7 @@ const NavigationHeader = observer(
             <select
               value={month}
               onChange={(e) => {
-                onMonthChange(Number(e.target.value));
+                onMonthChange(year, Number(e.target.value));
                 setShowMonthDropdown(false);
               }}
               style={{
@@ -412,6 +436,28 @@ const NavigationHeader = observer(
         >
           {groupCounts[groupIndex]} files
         </span>
+
+        {/* Groups are ordered newest first, top to bottom: up is the newer group, down the older one */}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '4px' }}>
+          <button
+            onClick={() => onGroupJump(groupIndex - 1)}
+            disabled={groupIndex - 1 < 0}
+            title="Next month (above)"
+            aria-label="Next month"
+            style={arrowButtonStyle(groupIndex - 1 < 0, headerStyles.buttonColor)}
+          >
+            ↑
+          </button>
+          <button
+            onClick={() => onGroupJump(groupIndex + 1)}
+            disabled={groupIndex + 1 >= groups.length}
+            title="Previous month (below)"
+            aria-label="Previous month"
+            style={arrowButtonStyle(groupIndex + 1 >= groups.length, headerStyles.buttonColor)}
+          >
+            ↓
+          </button>
+        </div>
       </div>
     );
   },
@@ -655,23 +701,46 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
   );
 
   const handleMonthChange = useCallback(
-    (month: number) => {
-      // Find which year this month belongs to by looking at available data
-      const targetYear = availableYears.find((year) => availableMonths(year).includes(month));
-      if (targetYear) {
-        const itemIndex = findScrollIndex(targetYear, month);
-        if (itemIndex >= 0 && virtuosoRef.current) {
-          // Try scrolling to the item index with specific alignment
-          virtuosoRef.current.scrollToIndex({
-            index: itemIndex,
-            align: 'start',
-            behavior: 'smooth',
-          });
-        }
+    (year: number, month: number) => {
+      const itemIndex = findScrollIndex(year, month);
+      if (itemIndex >= 0 && virtuosoRef.current) {
+        virtuosoRef.current.scrollToIndex({
+          index: itemIndex,
+          align: 'start',
+          behavior: 'smooth',
+        });
       }
     },
-    [availableYears, availableMonths, findScrollIndex],
+    [findScrollIndex],
   );
+
+  // Scroll to the start of a month group: a file index in list mode (columns = 1), a row index in grid mode
+  const handleGroupJump = useCallback(
+    (groupIndex: number) => {
+      if (groupIndex < 0 || groupIndex >= groupCounts.length || !virtuosoRef.current) {
+        return;
+      }
+      virtuosoRef.current.scrollToIndex({
+        index: rowStartIndex(groupCounts, groupIndex, columns),
+        align: 'start',
+        behavior: 'smooth',
+      });
+    },
+    [groupCounts, columns],
+  );
+
+  // Month grouping and keyboard/range selection only line up with the file list when it is sorted by date created,
+  // newest first. setMethodCalendar sorts that way, but a restored session or the context menu can change it.
+  const { orderBy, orderDirection } = fileStore;
+  useEffect(() => {
+    for (const fix of calendarSortFixes(orderBy, orderDirection === OrderDirection.Desc)) {
+      if (fix === 'orderByDateCreated') {
+        fileStore.orderFilesBy('dateCreated');
+      } else {
+        fileStore.switchOrderDirection();
+      }
+    }
+  }, [fileStore, orderBy, orderDirection]);
 
   // Add keyboard navigation support like other gallery components.
   // Navigates over the on-screen (month grouped) order, moving by one row of cells in grid mode.
@@ -685,7 +754,7 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
       if (position === -1) {
         return;
       }
-      const target = getArrowTarget(position, allFiles.length, e.key, columns);
+      const target = getGridArrowTarget(groupCounts, position, e.key, columns);
       if (target === undefined) {
         return;
       }
@@ -695,7 +764,7 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fileStore, select, lastSelectionIndex, allFiles, columns]);
+  }, [fileStore, select, lastSelectionIndex, allFiles, groupCounts, columns]);
 
   if (fileStore.fileList.length === 0) {
     return (
@@ -739,6 +808,7 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
             getMonthPhotoCount={getMonthPhotoCount}
             onYearChange={handleYearChange}
             onMonthChange={handleMonthChange}
+            onGroupJump={handleGroupJump}
           />
         )}
         itemContent={(index) => {
