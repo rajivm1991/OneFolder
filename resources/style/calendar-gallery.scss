@@ -1,4 +1,7 @@
 .calendar-gallery {
+  // Keep the sticky month headers (z-index 1, also set by react-virtuoso) below toolbar popovers such as the View menu
+  isolation: isolate;
+
   .calendar-gallery__month-container {
     display: flex;
     gap: 0.2rem;
