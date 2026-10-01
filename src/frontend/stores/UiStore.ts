@@ -17,6 +17,8 @@ import RootStore from './RootStore';
 
 import posthog from 'posthog-js';
 
+export type CalendarLayout = 'list' | 'grid';
+
 export const enum ViewMethod {
   List,
   Grid,
@@ -119,6 +121,7 @@ type PersistentPreferenceFields =
   | 'importDirectory'
   | 'method'
   | 'lastMasonryMethod'
+  | 'calendarLayout'
   | 'thumbnailSize'
   | 'thumbnailShape'
   | 'upscaleMode'
@@ -169,6 +172,7 @@ class UiStore {
   @observable searchMatchAny = false;
   @observable method: ViewMethod = ViewMethod.MasonryHorizontal;
   @observable lastMasonryMethod: ViewMethod = ViewMethod.MasonryHorizontal;
+  @observable calendarLayout: CalendarLayout = 'list';
   @observable isSlideMode: boolean = false;
   @observable isFullScreen: boolean = false;
   @observable outlinerWidth: number = UiStore.MIN_OUTLINER_WIDTH;
@@ -355,6 +359,14 @@ class UiStore {
   @action.bound setMethodCalendar(): void {
     this.rootStore.fileStore.orderFilesBy('dateCreated');
     this.method = ViewMethod.Calendar;
+  }
+
+  @action.bound setCalendarLayoutList(): void {
+    this.calendarLayout = 'list';
+  }
+
+  @action.bound setCalendarLayoutGrid(): void {
+    this.calendarLayout = 'grid';
   }
 
   @action.bound setMethodFaces(): void {
@@ -699,7 +711,10 @@ class UiStore {
     this.tagSelection.clear();
   }
 
-  @action.bound selectLocation(location: ClientLocation | ClientSubLocation, clear?: boolean): void {
+  @action.bound selectLocation(
+    location: ClientLocation | ClientSubLocation,
+    clear?: boolean,
+  ): void {
     if (clear === true) {
       this.clearLocationSelection();
     }
@@ -1004,6 +1019,7 @@ class UiStore {
           this.setImportDirectory(prefs.importDirectory);
         }
         this.setMethod(Number(prefs.method));
+        this.calendarLayout = prefs.calendarLayout === 'grid' ? 'grid' : 'list';
         if (prefs.thumbnailSize) {
           this.setThumbnailSize(prefs.thumbnailSize);
         }
@@ -1084,6 +1100,7 @@ class UiStore {
       importDirectory: this.importDirectory,
       method: this.method,
       lastMasonryMethod: this.lastMasonryMethod,
+      calendarLayout: this.calendarLayout,
       thumbnailSize: this.thumbnailSize,
       thumbnailShape: this.thumbnailShape,
       upscaleMode: this.upscaleMode,
