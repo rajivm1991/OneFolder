@@ -39,6 +39,8 @@ export const PREFERENCES_STORAGE_KEY = 'preferences';
 export interface IHotkeyMap {
   // Outliner actions
   toggleOutliner: string;
+  /** Second shortcut for the outliner (left side bar), alongside toggleOutliner */
+  toggleOutlinerAlt: string;
   replaceQuery: string;
 
   // Inspector actions
@@ -60,6 +62,10 @@ export interface IHotkeyMap {
   viewMap: string;
   viewDuplicates: string;
   viewSlide: string;
+  /** Calendar view: scroll to the newer month (the one above) */
+  calendarNewerMonth: string;
+  /** Calendar view: scroll to the older month (the one below) */
+  calendarOlderMonth: string;
   search: string;
   advancedSearch: string;
 
@@ -71,6 +77,7 @@ export interface IHotkeyMap {
 // https://blueprintjs.com/docs/#core/components/hotkeys.dialog
 export const defaultHotkeyMap: IHotkeyMap = {
   toggleOutliner: '1',
+  toggleOutlinerAlt: 'mod + \\',
   toggleInspector: '2',
   replaceQuery: 'r',
   toggleSettings: 's',
@@ -88,6 +95,8 @@ export const defaultHotkeyMap: IHotkeyMap = {
   viewFaces: 'alt + 6',
   viewMap: 'alt + 7',
   viewDuplicates: 'alt + 8',
+  calendarNewerMonth: 'shift + up',
+  calendarOlderMonth: 'shift + down',
   search: 'mod + f',
   advancedSearch: 'mod + shift + f',
   // openPreviewWindow: 'space',
@@ -924,7 +933,7 @@ class UiStore {
     const { hotkeyMap } = this;
     let isMatch = true;
     // UI
-    if (matches(hotkeyMap.toggleOutliner)) {
+    if (matches(hotkeyMap.toggleOutliner) || matches(hotkeyMap.toggleOutlinerAlt)) {
       this.toggleOutliner();
     } else if (matches(hotkeyMap.toggleInspector)) {
       this.toggleInspector();

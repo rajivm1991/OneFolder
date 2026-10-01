@@ -10,11 +10,13 @@ import { Thumbnail, ThumbnailTags } from './GalleryItem';
 import { CommandDispatcher, useCommandHandler } from './Commands';
 import { IconButton, IconSet } from 'widgets';
 import { OrderDirection } from 'src/api/data-storage-search';
+import { comboMatches, getKeyCombo, parseKeyCombo } from '../../hotkeyParser';
 import {
   calendarSortFixes,
   chunkIntoRows,
   computeColumns,
   getGridArrowTarget,
+  groupIndexAt,
   rowStartIndex,
 } from './calendar-utils';
 // Using HTML select elements for better compatibility
@@ -629,6 +631,8 @@ const GridCell = observer(({ file, size }: { file: ClientFile; size: number }) =
 const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: GalleryProps) => {
   const { fileStore, uiStore } = useStore();
   const virtuosoRef = useRef<GroupedVirtuosoHandle>(null);
+  /** Index of the first item (file in list mode, row in grid mode) currently in view */
+  const topItemIndex = useRef(0);
 
   // Navigation state no longer needed - each header shows its own month/year
 
@@ -746,6 +750,23 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
   // Navigates over the on-screen (month grouped) order, moving by one row of cells in grid mode.
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Month jump shortcuts (configurable in Settings > Shortcuts), relative to the month at the top of the view
+      const combo = getKeyCombo(e);
+      const isNewer = comboMatches(combo, parseKeyCombo(uiStore.hotkeyMap.calendarNewerMonth));
+      const isOlder = comboMatches(combo, parseKeyCombo(uiStore.hotkeyMap.calendarOlderMonth));
+      if (isNewer || isOlder) {
+        if (
+          uiStore.isSlideMode ||
+          (e.target as HTMLElement | null)?.matches('input, select, textarea')
+        ) {
+          return;
+        }
+        e.preventDefault();
+        const current = groupIndexAt(virtuosoGroupCounts, topItemIndex.current);
+        handleGroupJump(isNewer ? current - 1 : current + 1);
+        return;
+      }
+
       const index = lastSelectionIndex.current;
       if (index === undefined) {
         return;
@@ -764,7 +785,17 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [fileStore, select, lastSelectionIndex, allFiles, groupCounts, columns]);
+  }, [
+    fileStore,
+    uiStore,
+    select,
+    lastSelectionIndex,
+    allFiles,
+    groupCounts,
+    virtuosoGroupCounts,
+    columns,
+    handleGroupJump,
+  ]);
 
   if (fileStore.fileList.length === 0) {
     return (
@@ -797,6 +828,9 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
         ref={virtuosoRef}
         style={{ height: '100%', width: '100%' }}
         groupCounts={virtuosoGroupCounts}
+        rangeChanged={({ startIndex }) => {
+          topItemIndex.current = startIndex;
+        }}
         groupContent={(index) => (
           <NavigationHeader
             groupIndex={index}

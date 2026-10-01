@@ -97,3 +97,15 @@ export function calendarSortFixes(orderBy: string, isDescending: boolean): Calen
   }
   return fixes;
 }
+
+/** Index of the group containing the virtuoso item at `itemIndex`; out-of-range indexes clamp to the first/last group. */
+export function groupIndexAt(groupCounts: number[], itemIndex: number): number {
+  let start = 0;
+  for (let group = 0; group < groupCounts.length; group++) {
+    start += groupCounts[group];
+    if (itemIndex < start) {
+      return group;
+    }
+  }
+  return Math.max(0, groupCounts.length - 1);
+}

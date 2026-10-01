@@ -3,6 +3,7 @@ import {
   computeColumns,
   calendarSortFixes,
   getGridArrowTarget,
+  groupIndexAt,
   rowStartIndex,
 } from '../src/frontend/containers/ContentView/calendar-utils';
 
@@ -129,5 +130,28 @@ describe('calendarSortFixes', () => {
 
   it('fixes both, ordering first', () => {
     expect(calendarSortFixes('name', false)).toEqual(['orderByDateCreated', 'switchDirection']);
+  });
+});
+
+describe('groupIndexAt', () => {
+  // virtuoso item counts per month: items 0-2, 3-4, 5-9
+  const counts = [3, 2, 5];
+
+  it('returns the group containing the item index', () => {
+    expect(groupIndexAt(counts, 0)).toBe(0);
+    expect(groupIndexAt(counts, 2)).toBe(0);
+    expect(groupIndexAt(counts, 3)).toBe(1);
+    expect(groupIndexAt(counts, 4)).toBe(1);
+    expect(groupIndexAt(counts, 5)).toBe(2);
+    expect(groupIndexAt(counts, 9)).toBe(2);
+  });
+
+  it('clamps indexes outside the list to the first/last group', () => {
+    expect(groupIndexAt(counts, -4)).toBe(0);
+    expect(groupIndexAt(counts, 99)).toBe(2);
+  });
+
+  it('returns 0 when there are no groups', () => {
+    expect(groupIndexAt([], 3)).toBe(0);
   });
 });
