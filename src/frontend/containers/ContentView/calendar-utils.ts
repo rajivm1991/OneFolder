@@ -109,3 +109,40 @@ export function groupIndexAt(groupCounts: number[], itemIndex: number): number {
   }
   return Math.max(0, groupCounts.length - 1);
 }
+
+/**
+ * Virtuoso item index (file index in list mode, row index in grid mode) of the file at `position` in the flat,
+ * month-grouped list. Undefined if the position is outside the list.
+ */
+export function itemIndexOfPosition(
+  groupSizes: number[],
+  position: number,
+  columns: number,
+): number | undefined {
+  const total = groupSizes.reduce((sum, size) => sum + size, 0);
+  if (position < 0 || position >= total) {
+    return undefined;
+  }
+  const step = Math.max(1, Math.floor(columns));
+  const group = groupIndexAt(groupSizes, position);
+  const groupStart = groupSizes.slice(0, group).reduce((sum, size) => sum + size, 0);
+  return rowStartIndex(groupSizes, group, step) + Math.floor((position - groupStart) / step);
+}
+
+/**
+ * Where to align a scroll so `itemIndex` is fully in view, given the first/last item index currently rendered.
+ * The first and last rendered items may be partly cut off, so they count as out of view. Undefined = don't scroll.
+ */
+export function scrollAlignFor(
+  itemIndex: number,
+  firstVisible: number,
+  lastVisible: number,
+): 'start' | 'end' | undefined {
+  if (itemIndex <= firstVisible) {
+    return 'start';
+  }
+  if (itemIndex >= lastVisible) {
+    return 'end';
+  }
+  return undefined;
+}

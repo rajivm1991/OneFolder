@@ -4,7 +4,9 @@ import {
   calendarSortFixes,
   getGridArrowTarget,
   groupIndexAt,
+  itemIndexOfPosition,
   rowStartIndex,
+  scrollAlignFor,
 } from '../src/frontend/containers/ContentView/calendar-utils';
 
 describe('computeColumns', () => {
@@ -153,5 +155,46 @@ describe('groupIndexAt', () => {
 
   it('returns 0 when there are no groups', () => {
     expect(groupIndexAt([], 3)).toBe(0);
+  });
+});
+
+describe('itemIndexOfPosition', () => {
+  // 4 columns. Month A: 5 files (rows 0 and 1); month B: 6 files (rows 2 and 3)
+  const groups = [5, 6];
+
+  it('maps a file position to its row index in grid mode', () => {
+    expect(itemIndexOfPosition(groups, 0, 4)).toBe(0);
+    expect(itemIndexOfPosition(groups, 3, 4)).toBe(0);
+    expect(itemIndexOfPosition(groups, 4, 4)).toBe(1);
+    expect(itemIndexOfPosition(groups, 5, 4)).toBe(2);
+    expect(itemIndexOfPosition(groups, 8, 4)).toBe(2);
+    expect(itemIndexOfPosition(groups, 9, 4)).toBe(3);
+    expect(itemIndexOfPosition(groups, 10, 4)).toBe(3);
+  });
+
+  it('is the file position itself when columns is 1 (list mode)', () => {
+    expect(itemIndexOfPosition(groups, 7, 1)).toBe(7);
+  });
+
+  it('returns undefined for positions outside the list', () => {
+    expect(itemIndexOfPosition(groups, -1, 4)).toBeUndefined();
+    expect(itemIndexOfPosition(groups, 11, 4)).toBeUndefined();
+    expect(itemIndexOfPosition([], 0, 4)).toBeUndefined();
+  });
+});
+
+describe('scrollAlignFor', () => {
+  it('does nothing for an item strictly inside the visible range', () => {
+    expect(scrollAlignFor(5, 3, 8)).toBeUndefined();
+  });
+
+  it('aligns to the start when the item is at or above the first visible item', () => {
+    expect(scrollAlignFor(3, 3, 8)).toBe('start');
+    expect(scrollAlignFor(0, 3, 8)).toBe('start');
+  });
+
+  it('aligns to the end when the item is at or below the last visible item', () => {
+    expect(scrollAlignFor(8, 3, 8)).toBe('end');
+    expect(scrollAlignFor(20, 3, 8)).toBe('end');
   });
 });

@@ -1,4 +1,5 @@
 import React, { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { reaction } from 'mobx';
 import { observer } from 'mobx-react-lite';
 import { createPortal } from 'react-dom';
 import { GroupedVirtuoso, GroupedVirtuosoHandle } from 'react-virtuoso';
@@ -17,7 +18,9 @@ import {
   computeColumns,
   getGridArrowTarget,
   groupIndexAt,
+  itemIndexOfPosition,
   rowStartIndex,
+  scrollAlignFor,
 } from './calendar-utils';
 // Using HTML select elements for better compatibility
 
@@ -631,8 +634,10 @@ const GridCell = observer(({ file, size }: { file: ClientFile; size: number }) =
 const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: GalleryProps) => {
   const { fileStore, uiStore } = useStore();
   const virtuosoRef = useRef<GroupedVirtuosoHandle>(null);
-  /** Index of the first item (file in list mode, row in grid mode) currently in view */
-  const topItemIndex = useRef(0);
+  /** First and last item index (file in list mode, row in grid mode) currently rendered; edge items may be cut off */
+  const visibleRange = useRef({ start: 0, end: 0 });
+  /** When an arrow key was last pressed: selection changes right after it came from the keyboard, not the mouse */
+  const lastArrowKeyAt = useRef(0);
 
   // Navigation state no longer needed - each header shows its own month/year
 
@@ -746,6 +751,45 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
     }
   }, [fileStore, orderBy, orderDirection]);
 
+  // Keep the keyboard-selected file in view: if arrow-key navigation (here or in LayoutSwitcher for left/right) moves the
+  // selection onto a row that is outside, or cut off at the edge of, the viewport, scroll so that row is fully visible.
+  useEffect(() => {
+    const onArrowKey = (e: KeyboardEvent) => {
+      if (e.key.startsWith('Arrow')) {
+        lastArrowKeyAt.current = Date.now();
+      }
+    };
+    // Capture phase: runs before the handlers that change the selection
+    window.addEventListener('keydown', onArrowKey, true);
+
+    const dispose = reaction(
+      () => Array.from(uiStore.fileSelection),
+      () => {
+        if (Date.now() - lastArrowKeyAt.current > 300) {
+          return;
+        }
+        const index = lastSelectionIndex.current;
+        if (index === undefined) {
+          return;
+        }
+        const position = allFiles.indexOf(fileStore.fileList[index]);
+        const item = itemIndexOfPosition(groupCounts, position, columns);
+        if (item === undefined) {
+          return;
+        }
+        const align = scrollAlignFor(item, visibleRange.current.start, visibleRange.current.end);
+        if (align !== undefined) {
+          virtuosoRef.current?.scrollToIndex({ index: item, align, behavior: 'auto' });
+        }
+      },
+    );
+
+    return () => {
+      window.removeEventListener('keydown', onArrowKey, true);
+      dispose();
+    };
+  }, [uiStore, fileStore, lastSelectionIndex, allFiles, groupCounts, columns]);
+
   // Add keyboard navigation support like other gallery components.
   // Navigates over the on-screen (month grouped) order, moving by one row of cells in grid mode.
   useEffect(() => {
@@ -762,7 +806,7 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
           return;
         }
         e.preventDefault();
-        const current = groupIndexAt(virtuosoGroupCounts, topItemIndex.current);
+        const current = groupIndexAt(virtuosoGroupCounts, visibleRange.current.start);
         handleGroupJump(isNewer ? current - 1 : current + 1);
         return;
       }
@@ -828,8 +872,8 @@ const CalendarGallery = observer(({ contentRect, select, lastSelectionIndex }: G
         ref={virtuosoRef}
         style={{ height: '100%', width: '100%' }}
         groupCounts={virtuosoGroupCounts}
-        rangeChanged={({ startIndex }) => {
-          topItemIndex.current = startIndex;
+        rangeChanged={({ startIndex, endIndex }) => {
+          visibleRange.current = { start: startIndex, end: endIndex };
         }}
         groupContent={(index) => (
           <NavigationHeader
