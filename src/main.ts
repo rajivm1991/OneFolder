@@ -346,9 +346,9 @@ function createWindow() {
   }
 
   // Open the DevTools if in dev mode.
-  if (IS_DEV) {
-    mainWindow.webContents.openDevTools({ mode: 'detach' });
-  }
+  // if (IS_DEV) {
+  //   mainWindow.webContents.openDevTools({ mode: 'detach' });
+  // }
 
   // Emitted when the window is closed.
   mainWindow.on('closed', () => {
