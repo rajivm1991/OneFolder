@@ -37,13 +37,6 @@ export const SortCommand = observer(() => {
 });
 
 export const ViewCommand = observer(() => {
-  const { uiStore } = useStore();
-
-  // Hide entire view menu in calendar view since settings are now in each header
-  if (uiStore.isCalendar) {
-    return null;
-  }
-
   return (
     <MenuButton
       icon={IconSet.THUMB_BG}
@@ -109,6 +102,26 @@ const thumbnailSizeOptions = [
 
 export const LayoutMenuItems = observer(() => {
   const { uiStore } = useStore();
+
+  if (uiStore.isCalendar) {
+    return (
+      <MenuRadioGroup>
+        <MenuRadioItem
+          icon={IconSet.VIEW_LIST}
+          onClick={uiStore.setCalendarLayoutList}
+          checked={uiStore.calendarLayout === 'list'}
+          text="List"
+        />
+        <MenuRadioItem
+          icon={IconSet.VIEW_GRID}
+          onClick={uiStore.setCalendarLayoutGrid}
+          checked={uiStore.calendarLayout === 'grid'}
+          text="Grid"
+        />
+      </MenuRadioGroup>
+    );
+  }
+
   return (
     <MenuRadioGroup>
       <MenuRadioItem
