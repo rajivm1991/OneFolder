@@ -22,7 +22,7 @@ import Overlay from './frontend/Overlay';
 import PreviewApp from './frontend/Preview';
 import { FILE_STORAGE_KEY } from './frontend/stores/FileStore';
 import RootStore from './frontend/stores/RootStore';
-import { PREFERENCES_STORAGE_KEY } from './frontend/stores/UiStore';
+import { PREFERENCES_STORAGE_KEY, ViewMethod } from './frontend/stores/UiStore';
 import { SqliteBackend } from './backend/sqlite-backend';
 import { SqliteBackupScheduler } from './backend/sqlite-backup-scheduler';
 import { migrateDexieToSqlite } from './backend/migrate-dexie-to-sqlite';
@@ -103,6 +103,39 @@ async function main(): Promise<void> {
   console.groupEnd();
 }
 
+const LAST_CONTEXT_STORAGE_KEY = 'last-context-path';
+
+/**
+ * Switching context (File menu) relaunches the app, and the previous context's search criteria and
+ * view mode would otherwise be restored against the new one. When the context differs from the
+ * last one this window opened, drop the persisted search state and land in the grid view.
+ * Must run before the stores recover their preferences.
+ */
+function resetViewIfContextChanged(contextPath: string): void {
+  try {
+    const lastContextPath = localStorage.getItem(LAST_CONTEXT_STORAGE_KEY);
+    localStorage.setItem(LAST_CONTEXT_STORAGE_KEY, contextPath);
+    if (lastContextPath === null || lastContextPath === contextPath) {
+      return;
+    }
+
+    const prefsString = localStorage.getItem(PREFERENCES_STORAGE_KEY);
+    if (!prefsString) {
+      return;
+    }
+    const prefs = JSON.parse(prefsString);
+    prefs.method = ViewMethod.Grid;
+    prefs.lastMasonryMethod = ViewMethod.Grid;
+    prefs.searchCriteriaList = [];
+    prefs.searchMatchAny = false;
+    prefs.isSlideMode = false;
+    prefs.firstItem = 0;
+    localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(prefs));
+  } catch (e) {
+    console.error('Cannot reset view for new context', e);
+  }
+}
+
 async function runMainApp(contextPath: string, userDataPath: string, root: Root): Promise<void> {
   // The scheduler backs up through the backend's live connection, so the backend comes first.
   // Nothing calls notifyChange during init, so `backup` is always set by the time it's needed.
@@ -112,6 +145,7 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
   backup = new SqliteBackupScheduler(backend, await RendererMessenger.getDefaultBackupDirectory());
   await fse.ensureDir(backup.backupDirectory);
 
+  resetViewIfContextChanged(contextPath);
   const rootStore = await RootStore.main(backend, backup);
 
   RendererMessenger.initialized();
