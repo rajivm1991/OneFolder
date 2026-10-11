@@ -37,6 +37,10 @@ export const NavigationButton = ({
 const TagsPanel = observer(() => {
   const { uiStore } = useStore();
 
+  if (uiStore.isSlideMode) {
+    return null;
+  }
+
   return (
     <div className="navigation-buttons">
       <NavigationButton
