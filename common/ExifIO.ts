@@ -42,6 +42,7 @@
 // finds:
 // - automatically update Subject/Keywords when updating HierarchicalSubject: https://exiftool.org/forum/index.php?topic=9208.0
 // Update: only doing an export/import for all images for now, not real-time updates
+import { execFileSync } from 'child_process';
 import fse from 'fs-extra';
 import { action, makeObservable, observable, runInAction } from 'mobx';
 import exiftool from '@logion/node-exiftool';
@@ -56,6 +57,33 @@ const EXIF_TOOL_PATH = getExtraResourcePath(`exiftool/${exiftoolRunnable}`);
 
 console.log('Exif tool path: ', EXIF_TOOL_PATH);
 const ep = new exiftool.ExiftoolProcess(EXIF_TOOL_PATH);
+
+/**
+ * Kills exiftool stay_open processes left behind by earlier sessions (crash, force-quit, dev reload).
+ * Only processes with parent PID 1 are touched, so exiftool instances of other running OneFolder
+ * windows/instances are left alone. Not supported on Windows (no parent-PID reparenting to match on).
+ */
+function reapOrphanedExiftoolProcesses(): void {
+  if (IS_WIN) {
+    return;
+  }
+  try {
+    const out = execFileSync('ps', ['-axo', 'pid=,ppid=,command='], { encoding: 'utf8' });
+    for (const line of out.split('\n')) {
+      const match = line.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/);
+      if (!match) {
+        continue;
+      }
+      const [, pid, ppid, command] = match;
+      if (ppid === '1' && command.includes(EXIF_TOOL_PATH) && command.includes('-stay_open')) {
+        console.log('Killing orphaned exiftool process', pid);
+        process.kill(Number(pid));
+      }
+    }
+  } catch (e) {
+    console.warn('Could not reap orphaned exiftool processes', e);
+  }
+}
 
 const defaultWriteArgs = [
   // overwrite_original to prevent duplicate files appearing.
@@ -171,6 +199,7 @@ class ExifIO {
     }
     if (!this.isOpening) {
       this.isOpening = true;
+      reapOrphanedExiftoolProcesses();
       const pid = await ep.open();
       console.log('Started exiftool process %s', pid);
     } else {
@@ -190,6 +219,19 @@ class ExifIO {
       console.log('Closing Exiftool...');
       await ep.close();
       console.log('Closed Exiftool');
+    }
+  }
+
+  /**
+   * Synchronously kills the exiftool child process. Meant for window unload, where the async
+   * close() is cut short because the renderer is torn down before the process has exited.
+   */
+  killSync(): void {
+    try {
+      // _process is not part of node-exiftool's typings, but it is the spawned ChildProcess
+      (ep as unknown as { _process?: { kill: () => boolean } })._process?.kill();
+    } catch (e) {
+      console.warn('Could not kill exiftool process', e);
     }
   }
 

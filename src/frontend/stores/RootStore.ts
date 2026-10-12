@@ -211,8 +211,10 @@ class RootStore {
   }
 
   async close(): Promise<void> {
+    // The graceful close is async and gets cut off when the window unloads, which orphans the
+    // exiftool process. Kill it synchronously so it is gone before the renderer is torn down.
     // TODO: should be able to be done more reliably by running exiftool as a child process
-    return this.exifTool.close();
+    this.exifTool.killSync();
   }
 }
 
