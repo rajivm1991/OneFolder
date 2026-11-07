@@ -88,8 +88,20 @@ const ViewsGroup = observer(() => {
 const LibraryGroup = observer(() => {
   const { uiStore, fileStore, tagStore } = useStore();
 
+  // These rows only change which files are loaded, so also leave Map, People, Duplicates or Calendar
+  const handleAllClick = useCallback(() => {
+    uiStore.showGallery();
+    fileStore.fetchAllFiles();
+  }, [uiStore, fileStore]);
+
+  const handleMissingClick = useCallback(() => {
+    uiStore.showGallery();
+    fileStore.fetchMissingFiles();
+  }, [uiStore, fileStore]);
+
   const handleUntaggedClick = useCallback(
     (e: React.MouseEvent) => {
+      uiStore.showGallery();
       if (!e.ctrlKey) {
         fileStore.fetchUntaggedFiles();
         return;
@@ -115,7 +127,7 @@ const LibraryGroup = observer(() => {
         text="All images"
         count={fileStore.numTotalFiles}
         selected={fileStore.showsAllContent}
-        onClick={fileStore.fetchAllFiles}
+        onClick={handleAllClick}
         tooltip="View all images in library"
       />
       {/* Not shown when there are no tags at all: everything would be untagged, same as "All images" */}
@@ -135,7 +147,7 @@ const LibraryGroup = observer(() => {
           text="Missing"
           count={fileStore.numMissingFiles}
           selected={fileStore.showsMissingContent}
-          onClick={fileStore.fetchMissingFiles}
+          onClick={handleMissingClick}
           tooltip="View missing images on your system"
         />
       )}

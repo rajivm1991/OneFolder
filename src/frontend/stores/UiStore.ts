@@ -181,6 +181,8 @@ class UiStore {
   @observable searchMatchAny = false;
   @observable method: ViewMethod = ViewMethod.MasonryHorizontal;
   @observable lastMasonryMethod: ViewMethod = ViewMethod.MasonryHorizontal;
+  /** The last list or grid layout, for coming back from Map, People, Duplicates or Calendar. Not persisted. */
+  private lastGalleryMethod: ViewMethod = ViewMethod.MasonryHorizontal;
   @observable calendarLayout: CalendarLayout = 'list';
   @observable isSlideMode: boolean = false;
   @observable isFullScreen: boolean = false;
@@ -337,7 +339,24 @@ class UiStore {
   }
 
   @action.bound setMethodList(): void {
+    this.lastGalleryMethod = ViewMethod.List;
     this.method = ViewMethod.List;
+  }
+
+  /** Leave Map, People, Duplicates or Calendar for the last list or grid layout. Does nothing if one is already open. */
+  @action.bound showGallery(): void {
+    if (!this.isGalleryLayout) {
+      this.method = this.lastGalleryMethod;
+    }
+  }
+
+  @computed get isGalleryLayout(): boolean {
+    return (
+      this.method === ViewMethod.List ||
+      this.method === ViewMethod.Grid ||
+      this.method === ViewMethod.MasonryVertical ||
+      this.method === ViewMethod.MasonryHorizontal
+    );
   }
 
   @action.bound setMethodMasonry(): void {
@@ -352,16 +371,19 @@ class UiStore {
 
   @action.bound setMethodGrid(): void {
     this.lastMasonryMethod = ViewMethod.Grid;
+    this.lastGalleryMethod = ViewMethod.Grid;
     this.method = ViewMethod.Grid;
   }
 
   @action.bound setMethodMasonryVertical(): void {
     this.lastMasonryMethod = ViewMethod.MasonryVertical;
+    this.lastGalleryMethod = ViewMethod.MasonryVertical;
     this.method = ViewMethod.MasonryVertical;
   }
 
   @action.bound setMethodMasonryHorizontal(): void {
     this.lastMasonryMethod = ViewMethod.MasonryHorizontal;
+    this.lastGalleryMethod = ViewMethod.MasonryHorizontal;
     this.method = ViewMethod.MasonryHorizontal;
   }
 
