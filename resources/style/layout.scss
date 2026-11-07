@@ -79,6 +79,75 @@ body {
   --window-titlebar-height: 0;
 }
 
+// macOS: one 52px top bar instead of a custom title bar. The traffic lights are native and sit inset
+// in it, over a full-height translucent sidebar (the vibrancy itself is set on the BrowserWindow in main.ts).
+#layout-container[data-os='darwin'] {
+  --window-titlebar-height: 0px;
+  --toolbar-height: 3.25rem;
+
+  // Let the window vibrancy show through. Opaque surfaces (toolbar, content) paint their own background.
+  background: transparent;
+
+  // The toolbar drags the window; everything interactive in it opts out so it still receives clicks
+  #toolbar {
+    -webkit-app-region: drag;
+
+    button,
+    input,
+    a,
+    [role='button'],
+    .searchbar {
+      -webkit-app-region: no-drag;
+    }
+  }
+
+  // The OS ignores z-index when hit-testing drag regions, so popovers, menus and dialogs that overlap the
+  // toolbar strip must opt out too, otherwise the overlapping part cannot be clicked
+  [data-flyout],
+  [data-contextmenu],
+  [role='menu'],
+  [role='listbox'],
+  [role='grid'],
+  [role='tooltip'],
+  dialog {
+    -webkit-app-region: no-drag;
+  }
+
+  #outliner {
+    background: transparent;
+
+    // The strip above the sidebar content (where the traffic lights sit) also drags the window
+    &::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: var(--toolbar-height);
+      -webkit-app-region: drag;
+    }
+  }
+
+  #outliner-content {
+    top: var(--toolbar-height);
+
+    header {
+      background: transparent;
+    }
+  }
+
+  // Sidebar collapsed: the traffic lights now sit over the toolbar, so leave room for them. Kept in full
+  // screen too, so the toolbar does not shift when entering or leaving it.
+  &[data-outliner-open='false'] #toolbar {
+    padding-left: calc(var(--mac-system-buttons-width) + 0.5rem);
+  }
+
+  // If the app crashes, the error screen replaces the opaque surfaces, so give the window a background
+  &:has(.error-boundary) {
+    background: var(--background-color);
+  }
+}
+
 #toast-container {
   position: absolute;
   right: 1rem;
