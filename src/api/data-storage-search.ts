@@ -16,7 +16,11 @@ export type ConditionDTO<T> =
   | ArrayConditionDTO<T, any>
   | StringConditionDTO<T>
   | NumberConditionDTO<T>
-  | DateConditionDTO<T>;
+  | DateConditionDTO<T>
+  | OrConditionDTO<T>;
+
+/** Matches when any one of the conditions matches, whatever conjunction the surrounding conditions use */
+export type OrConditionDTO<T> = { valueType: 'or'; conditions: ConditionDTO<T>[] };
 
 export type ArrayConditionDTO<T, A> = BaseConditionDTO<T, ArrayOperatorType, Array<A>, 'array'>;
 

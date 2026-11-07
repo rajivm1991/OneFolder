@@ -12,6 +12,7 @@ import { Toolbar } from 'widgets/toolbar';
 import { useStore } from '../../../contexts/StoreContext';
 import { useAction } from '../../../hooks/mobx';
 import { comboMatches, getKeyCombo, parseKeyCombo } from '../../../hotkeyParser';
+import { clearTagFilters } from '../filter-utils';
 import TagsTree from './TagsTree';
 
 /**
@@ -100,6 +101,18 @@ export const OutlinerActionBar = observer(() => {
             disabled={isReIndexing}
             accelerator={<KeyCombo combo="ctrl+shift+R" />}
           />
+          <MenuItem
+            icon={IconSet.DUPLICATE}
+            onClick={uiStore.setMethodDuplicates}
+            text="find duplicates"
+          />
+          {fileStore.numMissingFiles > 0 && (
+            <MenuItem
+              icon={IconSet.WARNING_FILL}
+              onClick={fileStore.fetchMissingFiles}
+              text={`missing files (${fileStore.numMissingFiles.toLocaleString()})`}
+            />
+          )}
           <MenuItem
             icon={IconSet.THUMB_BG}
             onClick={() => {
@@ -230,10 +243,9 @@ const TagsPanel = (props: Partial<MultiSplitPaneProps>) => {
       return comboMatches(combo, parseKeyCombo(c));
     };
     const { hotkeyMap } = uiStore;
-    if (matches(hotkeyMap.selectAll)) {
-      uiStore.selectAllTags();
-    } else if (matches(hotkeyMap.deselectAll)) {
-      uiStore.clearTagSelection();
+    // Selecting every tag at once would mean "has all of them", so only deselecting is offered
+    if (matches(hotkeyMap.deselectAll)) {
+      clearTagFilters(uiStore);
     }
   });
 

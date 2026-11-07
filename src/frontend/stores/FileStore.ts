@@ -11,7 +11,11 @@ import { ID } from '../../api/id';
 import { AppToaster } from '../components/Toaster';
 import { ClientFile, mergeMovedFile } from '../entities/File';
 import { ClientLocation } from '../entities/Location';
-import { ClientStringSearchCriteria, ClientTagSearchCriteria } from '../entities/SearchCriteria';
+import {
+  ClientStringSearchCriteria,
+  ClientTagSearchCriteria,
+  criteriaToConditions,
+} from '../entities/SearchCriteria';
 import { ClientTag } from '../entities/Tag';
 import RootStore from './RootStore';
 
@@ -824,7 +828,11 @@ class FileStore {
       return this.fetchAllFiles();
     }
 
-    const criterias = uiStore.searchCriteriaList.map((c) => c.toCondition(this.rootStore));
+    const criterias = criteriaToConditions(
+      uiStore.searchCriteriaList,
+      this.rootStore,
+      uiStore.searchMatchAny,
+    );
     try {
       uiStore.setFirstItem(0);
       const fetchedFiles = await this.backend.searchFiles(

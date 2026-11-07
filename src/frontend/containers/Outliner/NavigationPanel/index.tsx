@@ -1,9 +1,8 @@
 import { observer } from 'mobx-react-lite';
-import React, { useCallback } from 'react';
+import React from 'react';
 import { IconSet } from 'widgets';
 
 import { useStore } from '../../../contexts/StoreContext';
-import { ClientTagSearchCriteria } from '../../../entities/SearchCriteria';
 
 type SidebarRowProps = {
   icon: JSX.Element;
@@ -57,6 +56,18 @@ const ViewsGroup = observer(() => {
   return (
     <SidebarGroup id="sidebar-views" title="Views">
       <SidebarRow
+        icon={IconSet.VIEW_GRID}
+        text="Grid"
+        selected={uiStore.isMasonry}
+        onClick={uiStore.setMethodMasonry}
+      />
+      <SidebarRow
+        icon={IconSet.VIEW_LIST}
+        text="List"
+        selected={uiStore.isList}
+        onClick={uiStore.setMethodList}
+      />
+      <SidebarRow
         icon={IconSet.WORLD}
         text="Map"
         selected={uiStore.isMap}
@@ -68,82 +79,14 @@ const ViewsGroup = observer(() => {
         selected={uiStore.isFaces}
         onClick={uiStore.setMethodFaces}
       />
-      <SidebarRow
-        icon={IconSet.DUPLICATE}
-        text="Duplicates"
-        selected={uiStore.isDuplicates}
-        onClick={uiStore.setMethodDuplicates}
-      />
-      {/* TODO: temporary. Remove together with the Calendar view; a year/month date filter replaces it. */}
-      <SidebarRow
-        icon={IconSet.FILTER_DATE}
-        text="Calendar"
-        selected={uiStore.isCalendar}
-        onClick={uiStore.setMethodCalendar}
-      />
     </SidebarGroup>
   );
 });
 
-const LibraryGroup = observer(() => {
-  const { uiStore, fileStore, tagStore } = useStore();
-
-  const handleUntaggedClick = useCallback(
-    (e: React.MouseEvent) => {
-      if (!e.ctrlKey) {
-        fileStore.fetchUntaggedFiles();
-        return;
-      }
-      // With ctrl key pressed, either add/remove a Untagged criteria based on whether it's already there
-      const maybeUntaggedCrit = uiStore.searchCriteriaList.find(
-        (crit) => crit instanceof ClientTagSearchCriteria && !crit.value,
-      );
-
-      if (maybeUntaggedCrit) {
-        uiStore.removeSearchCriteria(maybeUntaggedCrit);
-      } else {
-        uiStore.addSearchCriteria(new ClientTagSearchCriteria('tags'));
-      }
-    },
-    [fileStore, uiStore],
-  );
-
-  return (
-    <SidebarGroup id="sidebar-library" title="Library">
-      <SidebarRow
-        icon={IconSet.MEDIA}
-        text="All images"
-        count={fileStore.numTotalFiles}
-        selected={fileStore.showsAllContent}
-        onClick={fileStore.fetchAllFiles}
-        tooltip="View all images in library"
-      />
-      {/* Not shown when there are no tags at all: everything would be untagged, same as "All images" */}
-      {tagStore.root.subTags.length > 0 && (
-        <SidebarRow
-          icon={IconSet.TAG_BLANCO}
-          text="Untagged"
-          count={fileStore.numUntaggedFiles}
-          selected={fileStore.showsUntaggedContent}
-          onClick={handleUntaggedClick}
-          tooltip="View all untagged images"
-        />
-      )}
-      {fileStore.numMissingFiles > 0 && (
-        <SidebarRow
-          icon={IconSet.WARNING_FILL}
-          text="Missing"
-          count={fileStore.numMissingFiles}
-          selected={fileStore.showsMissingContent}
-          onClick={fileStore.fetchMissingFiles}
-          tooltip="View missing images on your system"
-        />
-      )}
-    </SidebarGroup>
-  );
-});
-
-/** The labelled Views and Library groups at the top of the sidebar */
+/**
+ * The Views group, and the heading of the Filters section below it. The Locations and Tags panels that follow
+ * in the sidebar are the filters: choosing rows there narrows whichever view is open.
+ */
 const NavigationPanel = observer(() => {
   const { uiStore } = useStore();
 
@@ -154,7 +97,11 @@ const NavigationPanel = observer(() => {
   return (
     <>
       <ViewsGroup />
-      <LibraryGroup />
+      <div className="section sidebar-group" id="sidebar-filters">
+        <header>
+          <h2>Filters</h2>
+        </header>
+      </div>
     </>
   );
 });

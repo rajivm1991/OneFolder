@@ -207,7 +207,7 @@
   margin-top: 0.25rem;
 }
 
-// SIDEBAR GROUPS (Views, Library)
+// SIDEBAR GROUPS (Views, and the Filters heading)
 
 .sidebar-group {
   // The headers reuse the look of the collapsible panel headers (#outliner-content header), but these do not collapse
@@ -218,6 +218,12 @@
   .sidebar-rows {
     padding: 0.25rem 0.5rem;
   }
+}
+
+// The Untagged row sits above the tag tree in the Tags filter, outside a .sidebar-rows container
+.untagged-row {
+  margin: 0.25rem 0.5rem 0;
+  width: calc(100% - 1rem);
 }
 
 .sidebar-row {
@@ -254,8 +260,9 @@
     outline-offset: -2px;
   }
 
-  // The active destination: tinted background, bold text and an accent icon (not colour alone)
-  &[aria-current='true'] {
+  // The active destination or chosen filter: tinted background, bold text and an accent icon (not colour alone)
+  &[aria-current='true'],
+  &[aria-pressed='true'] {
     font-weight: 600;
     color: var(--text-color-strong);
     background: var(--background-color-selected);
