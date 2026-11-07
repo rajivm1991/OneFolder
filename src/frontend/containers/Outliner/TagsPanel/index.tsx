@@ -1,27 +1,26 @@
 import { observer } from 'mobx-react-lite';
 import React, { useState } from 'react';
 
+import { shell } from 'electron';
+import { RendererMessenger } from 'src/ipc/renderer';
 import { Checkbox } from 'widgets';
-import { IconSet } from 'widgets';
+import { IconSet, KeyCombo } from 'widgets';
+import { MenuButton, MenuItem } from 'widgets/menus';
 import { MultiSplitPaneProps } from 'widgets/MultiSplit/MultiSplitPane';
 import { Alert, DialogButton } from 'widgets/popovers';
-import { Toolbar, ToolbarButton } from 'widgets/toolbar';
+import { Toolbar } from 'widgets/toolbar';
 import { useStore } from '../../../contexts/StoreContext';
 import { useAction } from '../../../hooks/mobx';
 import { comboMatches, getKeyCombo, parseKeyCombo } from '../../../hotkeyParser';
 import TagsTree from './TagsTree';
 
-// Tooltip info
-const enum TooltipInfo {
-  AllImages = 'View all images in library',
-  Untagged = 'View all untagged images',
-  Missing = 'View missing images on your system',
-  ReIndex = 'Re-index all files in library',
-}
-
+/**
+ * The footer of the sidebar: one menu with settings, help, feedback, updates and re-indexing.
+ * Also owns the re-index confirmation dialog and its keyboard shortcut.
+ */
 export const OutlinerActionBar = observer(() => {
   const rootStore = useStore();
-  const { fileStore } = rootStore;
+  const { fileStore, uiStore } = rootStore;
   const [showReIndexModal, setShowReIndexModal] = useState(false);
   const [isReIndexing, setIsReIndexing] = useState(false);
   const [importMetadata, setImportMetadata] = useState(false);
@@ -80,37 +79,48 @@ export const OutlinerActionBar = observer(() => {
 
   return (
     <>
-      <Toolbar id="actionbar" label="Action Bar" controls="content-view">
-        <div>
-          <ToolbarButton
-            text=""
+      <Toolbar id="actionbar" label="Sidebar actions" controls="content-view" isCompact>
+        <MenuButton
+          id="__sidebar-menu"
+          icon={IconSet.SETTINGS}
+          text="Settings and help"
+          tooltip="Settings and help"
+          menuID="__sidebar-menu-options"
+        >
+          <MenuItem
+            icon={IconSet.SETTINGS}
+            onClick={uiStore.toggleSettings}
+            text="settings"
+            accelerator={<KeyCombo combo={uiStore.hotkeyMap.toggleSettings} />}
+          />
+          <MenuItem
             icon={IconSet.RELOAD}
             onClick={handleReIndexClick}
-            tooltip={
-              isReIndexing ? 'Re-indexing in progress...' : 'Re-index Library (Ctrl+Shift+R)'
-            }
+            text={isReIndexing ? 're-indexing library…' : 're-index library…'}
             disabled={isReIndexing}
-            aria-label="Re-index entire library"
           />
-
-          <ToolbarButton
-            text={fileStore.numTotalFiles}
-            icon={IconSet.MEDIA}
-            onClick={fileStore.fetchAllFiles}
-            pressed={fileStore.showsAllContent}
-            tooltip={TooltipInfo.AllImages}
+          <MenuItem
+            icon={IconSet.THUMB_BG}
+            onClick={() => {
+              shell.openExternal('https://onefolder.canny.io/feedback');
+            }}
+            text="💡ideas + 🐞bugs"
           />
-
-          {fileStore.numMissingFiles > 0 && (
-            <ToolbarButton
-              text={fileStore.numMissingFiles}
-              icon={IconSet.WARNING_FILL}
-              onClick={fileStore.fetchMissingFiles}
-              pressed={fileStore.showsMissingContent}
-              tooltip={TooltipInfo.Missing}
-            />
-          )}
-        </div>
+          <MenuItem
+            icon={IconSet.HELPCENTER}
+            onClick={() => {
+              shell.openExternal(
+                'https://foul-channel-e2c.notion.site/Photo-Folder-71473f9595304d4fb7832237a787c56b?pvs=4',
+              );
+            }}
+            text="help center"
+          />
+          <MenuItem
+            icon={IconSet.RELOAD}
+            onClick={RendererMessenger.checkForUpdates}
+            text="check for updates"
+          />
+        </MenuButton>
       </Toolbar>
 
       <Alert

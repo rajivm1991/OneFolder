@@ -1,40 +1,150 @@
 import { observer } from 'mobx-react-lite';
-import React from 'react';
+import React, { useCallback } from 'react';
 import { IconSet } from 'widgets';
 
 import { useStore } from '../../../contexts/StoreContext';
+import { ClientTagSearchCriteria } from '../../../entities/SearchCriteria';
 
-type NavigationButtonProps = {
-  icon?: JSX.Element;
+type SidebarRowProps = {
+  icon: JSX.Element;
   text: string;
-  accelerator?: JSX.Element;
+  /** Muted number on the right, e.g. the number of files */
+  count?: number;
+  selected: boolean;
   onClick: (event: React.MouseEvent<HTMLElement>) => void;
-  disabled?: boolean;
-  checked: boolean;
+  tooltip?: string;
 };
 
-export const NavigationButton = ({
-  text,
-  icon,
-  onClick,
-  disabled,
-  checked,
-}: NavigationButtonProps) => (
+/** One labelled, clickable entry in a sidebar group */
+const SidebarRow = ({ icon, text, count, selected, onClick, tooltip }: SidebarRowProps) => (
   <button
-    title={text}
-    className={'navigation-button' + (checked ? ' navigation-button--checked' : '')}
-    tabIndex={-1}
-    aria-checked={checked}
-    onClick={disabled ? undefined : onClick}
-    aria-disabled={disabled}
+    className="sidebar-row"
+    title={tooltip}
+    aria-current={selected ? 'true' : undefined}
+    onClick={onClick}
   >
-    <p className="navigation-button__icon" aria-hidden>
+    <span className="sidebar-row__icon" aria-hidden>
       {icon}
-    </p>
-    {/* <p className="navigation-button__label">{text}</p> */}
+    </span>
+    <span className="sidebar-row__label">{text}</span>
+    {count !== undefined && <span className="sidebar-row__count">{count.toLocaleString()}</span>}
   </button>
 );
-const TagsPanel = observer(() => {
+
+/** A titled group of sidebar rows. Not collapsible, unlike the Locations and Tags panels. */
+const SidebarGroup = ({
+  id,
+  title,
+  children,
+}: {
+  id: string;
+  title: string;
+  children: React.ReactNode;
+}) => (
+  <div className="section sidebar-group" id={id}>
+    <header>
+      <h2>{title}</h2>
+    </header>
+    <div role="group" aria-label={title} className="sidebar-rows">
+      {children}
+    </div>
+  </div>
+);
+
+const ViewsGroup = observer(() => {
+  const { uiStore } = useStore();
+
+  return (
+    <SidebarGroup id="sidebar-views" title="Views">
+      <SidebarRow
+        icon={IconSet.WORLD}
+        text="Map"
+        selected={uiStore.isMap}
+        onClick={uiStore.setMethodMap}
+      />
+      <SidebarRow
+        icon={IconSet.FACE_SMILING}
+        text="People"
+        selected={uiStore.isFaces}
+        onClick={uiStore.setMethodFaces}
+      />
+      <SidebarRow
+        icon={IconSet.DUPLICATE}
+        text="Duplicates"
+        selected={uiStore.isDuplicates}
+        onClick={uiStore.setMethodDuplicates}
+      />
+      {/* TODO: temporary. Remove together with the Calendar view; a year/month date filter replaces it. */}
+      <SidebarRow
+        icon={IconSet.FILTER_DATE}
+        text="Calendar"
+        selected={uiStore.isCalendar}
+        onClick={uiStore.setMethodCalendar}
+      />
+    </SidebarGroup>
+  );
+});
+
+const LibraryGroup = observer(() => {
+  const { uiStore, fileStore, tagStore } = useStore();
+
+  const handleUntaggedClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (!e.ctrlKey) {
+        fileStore.fetchUntaggedFiles();
+        return;
+      }
+      // With ctrl key pressed, either add/remove a Untagged criteria based on whether it's already there
+      const maybeUntaggedCrit = uiStore.searchCriteriaList.find(
+        (crit) => crit instanceof ClientTagSearchCriteria && !crit.value,
+      );
+
+      if (maybeUntaggedCrit) {
+        uiStore.removeSearchCriteria(maybeUntaggedCrit);
+      } else {
+        uiStore.addSearchCriteria(new ClientTagSearchCriteria('tags'));
+      }
+    },
+    [fileStore, uiStore],
+  );
+
+  return (
+    <SidebarGroup id="sidebar-library" title="Library">
+      <SidebarRow
+        icon={IconSet.MEDIA}
+        text="All images"
+        count={fileStore.numTotalFiles}
+        selected={fileStore.showsAllContent}
+        onClick={fileStore.fetchAllFiles}
+        tooltip="View all images in library"
+      />
+      {/* Not shown when there are no tags at all: everything would be untagged, same as "All images" */}
+      {tagStore.root.subTags.length > 0 && (
+        <SidebarRow
+          icon={IconSet.TAG_BLANCO}
+          text="Untagged"
+          count={fileStore.numUntaggedFiles}
+          selected={fileStore.showsUntaggedContent}
+          onClick={handleUntaggedClick}
+          tooltip="View all untagged images"
+        />
+      )}
+      {fileStore.numMissingFiles > 0 && (
+        <SidebarRow
+          icon={IconSet.WARNING_FILL}
+          text="Missing"
+          count={fileStore.numMissingFiles}
+          selected={fileStore.showsMissingContent}
+          onClick={fileStore.fetchMissingFiles}
+          tooltip="View missing images on your system"
+        />
+      )}
+    </SidebarGroup>
+  );
+});
+
+/** The labelled Views and Library groups at the top of the sidebar */
+const NavigationPanel = observer(() => {
   const { uiStore } = useStore();
 
   if (uiStore.isSlideMode) {
@@ -42,45 +152,11 @@ const TagsPanel = observer(() => {
   }
 
   return (
-    <div className="navigation-buttons">
-      <NavigationButton
-        icon={IconSet.VIEW_LIST}
-        onClick={uiStore.setMethodList}
-        checked={uiStore.isList}
-        text="List"
-      />
-      <NavigationButton
-        icon={IconSet.VIEW_GRID}
-        onClick={uiStore.setMethodMasonry}
-        checked={uiStore.isMasonry}
-        text="Grid"
-      />
-      <NavigationButton
-        icon={IconSet.DUPLICATE}
-        onClick={uiStore.setMethodDuplicates}
-        checked={uiStore.isDuplicates}
-        text="Duplicates"
-      />
-      <NavigationButton
-        icon={IconSet.FACE_SMILING}
-        onClick={uiStore.setMethodFaces}
-        checked={uiStore.isFaces}
-        text="Faces"
-      />
-      <NavigationButton
-        icon={IconSet.WORLD}
-        onClick={uiStore.setMethodMap}
-        checked={uiStore.isMap}
-        text="Map"
-      />
-      <NavigationButton
-        icon={IconSet.FILTER_DATE}
-        onClick={uiStore.setMethodCalendar}
-        checked={uiStore.isCalendar}
-        text="Calendar"
-      />
-    </div>
+    <>
+      <ViewsGroup />
+      <LibraryGroup />
+    </>
   );
 });
 
-export default TagsPanel;
+export default NavigationPanel;
