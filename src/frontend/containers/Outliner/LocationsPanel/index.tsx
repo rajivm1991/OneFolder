@@ -17,12 +17,18 @@ import DropContext from '../../../contexts/DropContext';
 import { useStore } from '../../../contexts/StoreContext';
 import { DnDLocationType, useLocationDnD } from '../../../contexts/TagDnDContext';
 import { ClientLocation, ClientSubLocation } from '../../../entities/Location';
-import { ClientStringSearchCriteria } from '../../../entities/SearchCriteria';
 import { useAutorun } from '../../../hooks/mobx';
 import LocationStore from '../../../stores/LocationStore';
 import { IExpansionState } from '../../types';
 import { createDragReorderHelper } from '../TreeItemDnD';
 import TreeItemRevealer from '../TreeItemRevealer';
+import {
+  isAdditiveClick,
+  isLocationFilter,
+  locationFilterCriteria,
+  pathAsSearchPath,
+  toggleLocationFilter,
+} from '../filter-utils';
 import { triggerContextMenuEvent } from '../utils';
 import LocationCreationDialog from './LocationCreationDialog';
 import LocationRecoveryDialog from './LocationRecoveryDialog';
@@ -100,12 +106,6 @@ const isExpanded = (nodeData: ClientLocation | ClientSubLocation, treeData: ITre
 const isSelected = (nodeData: ClientLocation | ClientSubLocation, treeData: ITreeData): boolean =>
   treeData.selectedIds.has(nodeData instanceof ClientLocation ? nodeData.id : nodeData.path);
 
-/** Add an additional / or \ in order to enforce files only in the specific directory are found, not in those starting with same name */
-const pathAsSearchPath = (path: string) => `${path}${SysPath.sep}`;
-
-const pathCriteria = (path: string) =>
-  new ClientStringSearchCriteria('absolutePath', pathAsSearchPath(path), 'startsWith');
-
 const customKeys = (
   search: (path: string) => void,
   event: React.KeyboardEvent<HTMLLIElement>,
@@ -157,12 +157,12 @@ const DirectoryMenu = observer(
     const handleOpenFileExplorer = useCallback(() => shell.showItemInFolder(path), [path]);
 
     const handleAddToSearch = useCallback(
-      () => uiStore.addSearchCriteria(pathCriteria(path)),
+      () => uiStore.addSearchCriteria(locationFilterCriteria(path)),
       [path, uiStore],
     );
 
     const handleReplaceSearch = useCallback(
-      () => uiStore.replaceSearchCriteria(pathCriteria(path)),
+      () => uiStore.replaceSearchCriteria(locationFilterCriteria(path)),
       [path, uiStore],
     );
 
@@ -251,25 +251,10 @@ const SubLocation = observer((props: { nodeData: ClientSubLocation; treeData: IT
     [nodeData, show, treeData.exclude, treeData.rescan],
   );
 
-  const existingSearchCrit = uiStore.searchCriteriaList.find(
-    (c: any) => c.value === pathAsSearchPath(nodeData.path),
-  );
-  // const isSearched = Boolean(existingSearchCrit);
-
   const handleClick = useCallback(
-    (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
-      if (existingSearchCrit) {
-        uiStore.removeSearchCriteria(existingSearchCrit);
-        uiStore.deselectLocation(nodeData);
-      } else if (event.ctrlKey) {
-        uiStore.addSearchCriteria(pathCriteria(nodeData.path));
-        uiStore.selectLocation(nodeData);
-      } else {
-        uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
-        uiStore.selectLocation(nodeData, true);
-      }
-    },
-    [existingSearchCrit, nodeData, uiStore],
+    (event: React.MouseEvent<HTMLElement, MouseEvent>) =>
+      toggleLocationFilter(uiStore, nodeData.path, isAdditiveClick(event)),
+    [nodeData, uiStore],
   );
 
   const { handleDragEnter, handleDragLeave, handleDrop } = useFileDropHandling(
@@ -328,25 +313,10 @@ const Location = observer(
       [show, nodeData, onDelete, treeData.exclude, treeData.rescan],
     );
 
-    // TODO: idem
-    const existingSearchCrit = uiStore.searchCriteriaList.find(
-      (c: any) => c.value === pathAsSearchPath(nodeData.path),
-    );
-
     const handleClick = useCallback(
-      (event: React.MouseEvent<HTMLElement, MouseEvent>) => {
-        if (existingSearchCrit) {
-          uiStore.removeSearchCriteria(existingSearchCrit);
-          uiStore.deselectLocation(nodeData);
-        } else if (event.ctrlKey) {
-          uiStore.addSearchCriteria(pathCriteria(nodeData.path));
-          uiStore.selectLocation(nodeData);
-        } else {
-          uiStore.replaceSearchCriteria(pathCriteria(nodeData.path));
-          uiStore.selectLocation(nodeData, true);
-        }
-      },
-      [existingSearchCrit, nodeData, uiStore],
+      (event: React.MouseEvent<HTMLElement, MouseEvent>) =>
+        toggleLocationFilter(uiStore, nodeData.path, isAdditiveClick(event)),
+      [nodeData, uiStore],
     );
 
     const fileDnD = useFileDropHandling(
@@ -470,8 +440,18 @@ interface ILocationTreeProps {
 const LocationsTree = observer(({ onDelete, onExclude, onRescan }: ILocationTreeProps) => {
   const { locationStore, uiStore } = useStore();
   const [expansion, setExpansion] = useState<IExpansionState>({});
-  // Not memoized on the observable set: its reference never changes, so the copy would go stale
-  const selectedIds = new Set(uiStore.locationSelection);
+  // A folder is selected when it is one of the folders being searched. Not memoized: it reads observables.
+  const searchedPaths = new Set(
+    uiStore.searchCriteriaList.filter(isLocationFilter).map((c) => c.value),
+  );
+  const selectedIds = new Set<string>();
+  const collect = (folder: ClientLocation | ClientSubLocation) => {
+    if (searchedPaths.has(pathAsSearchPath(folder.path))) {
+      selectedIds.add(folder instanceof ClientLocation ? folder.id : folder.path);
+    }
+    folder.subLocations.forEach(collect);
+  };
+  locationStore.locationList.forEach(collect);
 
   const treeData: ITreeData = useMemo<ITreeData>(
     () => ({
@@ -499,7 +479,7 @@ const LocationsTree = observer(({ onDelete, onExclude, onRescan }: ILocationTree
         isExpanded,
         () => {},
         toggleExpansion,
-        customKeys.bind(null, (path: string) => uiStore.replaceSearchCriteria(pathCriteria(path))),
+        customKeys.bind(null, (path: string) => toggleLocationFilter(uiStore, path, false)),
       ),
     [uiStore],
   );
