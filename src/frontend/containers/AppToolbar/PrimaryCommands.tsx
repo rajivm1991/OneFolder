@@ -9,7 +9,6 @@ import { useStore } from '../../contexts/StoreContext';
 import { SortCommand } from './Menus';
 import { ViewCommand } from './Menus';
 import Searchbar from './Searchbar';
-import SecondaryCommands from './SecondaryCommands';
 
 const OutlinerToggle = observer(() => {
   const { uiStore } = useStore();
@@ -24,6 +23,30 @@ const OutlinerToggle = observer(() => {
       onClick={uiStore.toggleOutliner}
       tabIndex={0}
     />
+  );
+});
+
+/** Switches between the grid (masonry) and list layouts of the file gallery */
+const LayoutSwitch = observer(() => {
+  const { uiStore } = useStore();
+
+  return (
+    <div role="group" aria-label="Layout" className="layout-switch">
+      <ToolbarButton
+        icon={IconSet.VIEW_GRID}
+        text="Grid"
+        tooltip="Grid view"
+        onClick={uiStore.setMethodMasonry}
+        pressed={uiStore.isMasonry}
+      />
+      <ToolbarButton
+        icon={IconSet.VIEW_LIST}
+        text="List"
+        tooltip="List view"
+        onClick={uiStore.setMethodList}
+        pressed={uiStore.isList}
+      />
+    </div>
   );
 });
 
@@ -47,11 +70,13 @@ const PrimaryCommands = observer(() => {
 
       <Searchbar />
 
+      {/* Calendar has its own grid/list toggle in ViewCommand; this goes away with the Calendar view */}
+      {!uiStore.isCalendar && <LayoutSwitch />}
+
       {/* <ViewCommand /> */}
       {(uiStore.isMasonry || uiStore.isCalendar) && <ViewCommand />}
 
       <SortCommand />
-      <SecondaryCommands />
     </>
   );
 });

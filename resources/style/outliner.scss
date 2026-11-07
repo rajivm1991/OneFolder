@@ -179,7 +179,8 @@
   left: 0;
   right: 0;
   height: 2rem;
-  justify-content: center;
+  justify-content: flex-start;
+  padding-left: 0.5rem;
   display: flex;
 
   .toolbar-button {
@@ -188,17 +189,9 @@
     min-height: 1.5rem;
 
     &:active,
-    &:hover,
-    &[aria-pressed='true'],
-    &[aria-checked='true'] {
+    &:hover {
       color: var(--accent-color);
     }
-  }
-
-  span {
-    margin: 0 0.125rem;
-    font-size: 0.6875rem;
-    font-weight: bold;
   }
 }
 
@@ -214,31 +207,61 @@
   margin-top: 0.25rem;
 }
 
-.navigation-buttons {
-  display: flex;
-  overflow-x: auto; /* Allows horizontal scrolling if needed */
-  white-space: nowrap; /* Prevents text wrapping */
-  // The multi-split container scrolls when the last panel is taller than it (e.g. a long location list); keep the buttons in view
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  flex-shrink: 0;
-  background: var(--background-color-alt);
+// SIDEBAR GROUPS (Views, Library)
+
+.sidebar-group {
+  // The headers reuse the look of the collapsible panel headers (#outliner-content header), but these do not collapse
+  > header h2 {
+    cursor: default;
+  }
+
+  .sidebar-rows {
+    padding: 0.25rem 0.5rem;
+  }
 }
 
-.navigation-button {
-  // flex: 0 0 auto; /* Prevents buttons from shrinking */
-  width: 100%; /* Square width */
-  // height: 100%; /* Square height */
+.sidebar-row {
   display: flex;
   align-items: center;
-  justify-content: center;
-  margin: 2px;
-  transition: border-color 0.3s;
-  border-radius: 10px;
-}
+  gap: 0.5rem;
+  width: 100%;
+  height: 1.75rem;
+  padding: 0 0.5rem;
+  border-radius: 0.375rem;
+  font-weight: 400;
+  text-align: left;
 
-.navigation-button--checked {
-  background-color: var(--background-color);
-  border-radius: 10px;
+  .sidebar-row__icon {
+    display: flex;
+    color: var(--text-color-muted);
+  }
+
+  .sidebar-row__label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-row__count {
+    font-size: 0.6875rem;
+    font-weight: 400;
+    color: var(--text-color-muted);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: -2px;
+  }
+
+  // The active destination: tinted background, bold text and an accent icon (not colour alone)
+  &[aria-current='true'] {
+    font-weight: 600;
+    color: var(--text-color-strong);
+    background: var(--background-color-selected);
+
+    .sidebar-row__icon {
+      color: var(--accent-color);
+    }
+  }
 }

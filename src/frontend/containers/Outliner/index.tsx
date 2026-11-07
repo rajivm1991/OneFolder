@@ -28,8 +28,9 @@ const Outliner = () => {
           setHeights={setHeights}
         >
           <NavigationPanel />
-          <TagsPanel />
           <LocationsPanel />
+          <TagsPanel />
+          {/* Hidden on purpose since 2023 (commit f681c26c). Re-enable here as the last group if wanted. */}
           {/* <SavedSearchesPanel /> */}
           {/* <GenericButtonNavigation
             text="Give Feedback!"
