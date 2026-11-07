@@ -22,45 +22,79 @@ export function dateFilterCriteria(value: DateFilterValue): ClientDateSearchCrit
   ];
 }
 
-function isFromCreated(crit: ClientFileSearchCriteria): crit is ClientDateSearchCriteria {
-  return crit instanceof ClientDateSearchCriteria && crit.key === KEY;
-}
-
-/** Whether a criterion is one of the two that the date filter adds (and removes again on Clear). */
-export function isDateFilterCriterion(crit: ClientFileSearchCriteria): boolean {
-  return (
-    isFromCreated(crit) &&
-    (crit.operator === 'greaterThanOrEquals' || crit.operator === 'smallerThan')
-  );
+function valueOfRange(start: Date, end: Date): DateFilterValue | undefined {
+  if (start.getDate() !== 1) {
+    return undefined;
+  }
+  const year = start.getFullYear();
+  const month = start.getMonth();
+  if (month === 0 && end.getTime() === new Date(year + 1, 0, 1).getTime()) {
+    return { year };
+  }
+  return end.getTime() === new Date(year, month + 1, 1).getTime() ? { year, month } : undefined;
 }
 
 /**
- * The year or month currently filtered on, or undefined when the criteria are not exactly the pair
- * this filter creates (for instance a range typed in by hand in the advanced search).
+ * Finds the pair of criteria that make up a date filter: created on or after the first of a month, and
+ * before the end of exactly that year or month. Other date terms, such as a range typed in by hand in the
+ * advanced search, are not part of the filter and are left alone.
  */
+export function findDateFilter(
+  criteria: readonly ClientFileSearchCriteria[],
+):
+  | { value: DateFilterValue; criteria: [ClientDateSearchCriteria, ClientDateSearchCriteria] }
+  | undefined {
+  const created = criteria.filter(
+    (c): c is ClientDateSearchCriteria => c instanceof ClientDateSearchCriteria && c.key === KEY,
+  );
+  for (const from of created.filter((c) => c.operator === 'greaterThanOrEquals')) {
+    for (const until of created.filter((c) => c.operator === 'smallerThan')) {
+      const value = valueOfRange(from.value, until.value);
+      if (value) {
+        return { value, criteria: [from, until] };
+      }
+    }
+  }
+  return undefined;
+}
+
+/** The year or month currently filtered on, or undefined when there is no date filter. */
 export function readDateFilter(
   criteria: readonly ClientFileSearchCriteria[],
 ): DateFilterValue | undefined {
-  const dated = criteria.filter(isDateFilterCriterion) as ClientDateSearchCriteria[];
-  const from = dated.find((c) => c.operator === 'greaterThanOrEquals');
-  const until = dated.find((c) => c.operator === 'smallerThan');
-  if (dated.length !== 2 || !from || !until) {
-    return undefined;
-  }
-  const { value: start } = from;
-  const { value: end } = until;
-  const year = start.getFullYear();
-  const month = start.getMonth();
-  const isFirstOfMonth = start.getDate() === 1;
-  if (!isFirstOfMonth) {
-    return undefined;
-  }
-  const isWholeYear = month === 0 && end.getTime() === new Date(year + 1, 0, 1).getTime();
-  if (isWholeYear) {
-    return { year };
-  }
-  const isOneMonth = end.getTime() === new Date(year, month + 1, 1).getTime();
-  return isOneMonth ? { year, month } : undefined;
+  return findDateFilter(criteria)?.value;
+}
+
+/** The criteria without the date filter's own pair; everything else, including other date terms, stays. */
+export function withoutDateFilter(
+  criteria: readonly ClientFileSearchCriteria[],
+): ClientFileSearchCriteria[] {
+  const found = findDateFilter(criteria);
+  return found
+    ? criteria.filter((c) => !found.criteria.includes(c as ClientDateSearchCriteria))
+    : [...criteria];
+}
+
+/**
+ * Where an arrow key moves focus in a grid of `total` cells laid out in rows of `columns`.
+ * Returns the same index when the move would leave the grid.
+ */
+export function gridMove(index: number, key: string, columns: number, total: number): number {
+  const delta =
+    key === 'ArrowLeft'
+      ? -1
+      : key === 'ArrowRight'
+      ? 1
+      : key === 'ArrowUp'
+      ? -columns
+      : key === 'ArrowDown'
+      ? columns
+      : 0;
+  const next = index + delta;
+  const crossesRow =
+    (key === 'ArrowLeft' || key === 'ArrowRight') &&
+    Math.floor(next / columns) !== Math.floor(index / columns);
+  return delta === 0 || next < 0 || next >= total || crossesRow ? index : next;
 }
 
 export const MONTH_LABELS = [

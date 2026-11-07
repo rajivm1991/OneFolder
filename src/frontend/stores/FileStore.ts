@@ -522,10 +522,7 @@ class FileStore {
     let checked = 0;
 
     AppToaster.show(
-      {
-        message: `Checking ${total} file${total === 1 ? '' : 's'} for incorrect dimensions...`,
-        timeout: 0,
-      },
+      { message: `Checking ${total} file${total === 1 ? '' : 's'} for incorrect dimensions...`, timeout: 0 },
       toastKey,
     );
 
@@ -557,10 +554,7 @@ class FileStore {
     );
 
     AppToaster.show(
-      {
-        message: `Done. Fixed dimensions for ${fixed}/${checked} file${checked === 1 ? '' : 's'}.`,
-        timeout: 7000,
-      },
+      { message: `Done. Fixed dimensions for ${fixed}/${checked} file${checked === 1 ? '' : 's'}.`, timeout: 7000 },
       toastKey,
     );
   }

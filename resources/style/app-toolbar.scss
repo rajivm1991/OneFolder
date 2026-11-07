@@ -121,10 +121,22 @@
     min-height: 2.5rem;
   }
 
+  // Takes focus when the popover opens, so that it can be dismissed; not a control, so no ring
+  &:focus {
+    outline: none;
+  }
+
   &__count {
     font-size: 0.6875rem;
     font-weight: 400;
     color: var(--text-color-muted);
+  }
+
+  // The muted grey is too faint on the selected background and under the disabled fade: use the button colour
+  button[aria-pressed='true'] .date-filter__count,
+  button:disabled .date-filter__count {
+    color: inherit;
+    opacity: 0.8;
   }
 
   &__footer {

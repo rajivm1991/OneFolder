@@ -3,8 +3,9 @@ import {
   dateFilterCriteria,
   dateFilterLabel,
   dateRange,
-  isDateFilterCriterion,
+  gridMove,
   readDateFilter,
+  withoutDateFilter,
 } from '../src/frontend/containers/AppToolbar/date-filter-utils';
 import {
   ClientDateSearchCriteria,
@@ -65,19 +66,48 @@ describe('readDateFilter', () => {
   });
 });
 
-describe('isDateFilterCriterion', () => {
-  it('matches only the created-date range pair', () => {
-    const [from, until] = dateFilterCriteria({ year: 2024 });
-    expect(isDateFilterCriterion(from)).toBe(true);
-    expect(isDateFilterCriterion(until)).toBe(true);
-    expect(
-      isDateFilterCriterion(
-        new ClientDateSearchCriteria('dateModified', new Date(), 'smallerThan'),
-      ),
-    ).toBe(false);
-    expect(
-      isDateFilterCriterion(new ClientDateSearchCriteria('dateCreated', new Date(), 'equals')),
-    ).toBe(false);
+describe('withoutDateFilter', () => {
+  const handTypedBefore = () =>
+    new ClientDateSearchCriteria('dateCreated', new Date(2020, 0, 1), 'smallerThan');
+  const handTypedModified = () =>
+    new ClientDateSearchCriteria('dateModified', new Date(2020, 0, 1), 'greaterThanOrEquals');
+
+  it('removes only the pair the date filter made', () => {
+    const name = new ClientStringSearchCriteria('name', 'beach', 'contains');
+    const before = handTypedBefore();
+    const modified = handTypedModified();
+    const crits = [name, before, ...dateFilterCriteria({ year: 2024, month: 5 }), modified];
+    expect(withoutDateFilter(crits)).toEqual([name, before, modified]);
+    expect(readDateFilter(crits)).toEqual({ year: 2024, month: 5 });
+  });
+
+  it('leaves hand-typed date terms alone when there is no date filter', () => {
+    const crits = [
+      new ClientDateSearchCriteria('dateCreated', new Date(2024, 0, 1), 'greaterThanOrEquals'),
+      new ClientDateSearchCriteria('dateCreated', new Date(2024, 4, 1), 'smallerThan'),
+    ];
+    expect(withoutDateFilter(crits)).toEqual(crits);
+  });
+});
+
+describe('gridMove', () => {
+  // 4 columns, 12 cells: indices 0..11
+  it('moves by one cell sideways and by a row vertically', () => {
+    expect(gridMove(5, 'ArrowRight', 4, 12)).toBe(6);
+    expect(gridMove(5, 'ArrowLeft', 4, 12)).toBe(4);
+    expect(gridMove(5, 'ArrowDown', 4, 12)).toBe(9);
+    expect(gridMove(5, 'ArrowUp', 4, 12)).toBe(1);
+  });
+
+  it('stays put at the edges instead of wrapping onto another row', () => {
+    expect(gridMove(3, 'ArrowRight', 4, 12)).toBe(3);
+    expect(gridMove(4, 'ArrowLeft', 4, 12)).toBe(4);
+    expect(gridMove(1, 'ArrowUp', 4, 12)).toBe(1);
+    expect(gridMove(10, 'ArrowDown', 4, 12)).toBe(10);
+  });
+
+  it('ignores other keys', () => {
+    expect(gridMove(5, 'Enter', 4, 12)).toBe(5);
   });
 });
 

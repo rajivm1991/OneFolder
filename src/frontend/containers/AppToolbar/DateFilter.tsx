@@ -1,5 +1,5 @@
 import { observer } from 'mobx-react-lite';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { MonthCount } from 'src/api/data-storage';
 import { IconSet } from 'widgets';
@@ -10,13 +10,15 @@ import {
   DateFilterValue,
   dateFilterCriteria,
   dateFilterLabel,
-  isDateFilterCriterion,
+  gridMove,
   MONTH_LABELS,
   readDateFilter,
+  withoutDateFilter,
 } from './date-filter-utils';
 
 /** How many year chips fit in a row before the arrows are needed */
 const YEARS_PER_PAGE = 6;
+const MONTH_COLUMNS = 4;
 
 const sameValue = (a: DateFilterValue | undefined, b: DateFilterValue) =>
   a !== undefined && a.year === b.year && a.month === b.month;
@@ -25,15 +27,20 @@ const sameValue = (a: DateFilterValue | undefined, b: DateFilterValue) =>
 const DateFilter = observer(() => {
   const { uiStore, fileStore } = useStore();
   const [isOpen, setIsOpen] = useState(false);
-  const [counts, setCounts] = useState<MonthCount[]>([]);
-  const [yearPage, setYearPage] = useState(0);
+  // undefined while loading
+  const [counts, setCounts] = useState<MonthCount[] | undefined>(undefined);
+  const [countsFailed, setCountsFailed] = useState(false);
+  // The year chosen while browsing, and the page of year chips, both only until the popover is closed.
+  // Without them the popover follows the active filter.
   const [browsedYear, setBrowsedYear] = useState<number | undefined>(undefined);
+  const [yearPageOverride, setYearPageOverride] = useState<number | undefined>(undefined);
+  const targetRef = useRef<HTMLDivElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const active = readDateFilter(uiStore.searchCriteriaList);
-  const hasUnreadableDateFilter =
-    active === undefined && uiStore.searchCriteriaList.some(isDateFilterCriterion);
 
-  // Counts are read when the popover opens, so they are current without having to watch the library
+  // Counts are read when the popover opens, and again if the number of files changes while it is open
+  const totalFiles = fileStore.numTotalFiles;
   useEffect(() => {
     if (!isOpen) {
       return;
@@ -44,39 +51,67 @@ const DateFilter = observer(() => {
       .then((result) => {
         if (!cancelled) {
           setCounts(result);
+          setCountsFailed(false);
         }
       })
-      .catch((err) => console.error('Could not count files per month', err));
+      .catch((err) => {
+        console.error('Could not count files per month', err);
+        if (!cancelled) {
+          setCountsFailed(true);
+        }
+      });
     return () => {
       cancelled = true;
     };
-  }, [isOpen, fileStore]);
+  }, [isOpen, fileStore, totalFiles]);
+
+  // Move focus into the popover when it opens: the popover is only dismissed from focus leaving it
+  useLayoutEffect(() => {
+    if (isOpen) {
+      popoverRef.current?.focus();
+    }
+  }, [isOpen]);
+
+  const monthCounts = counts ?? [];
 
   // Years that have files, newest first
   const years = useMemo(() => {
-    const set = new Set(counts.map((c) => c.year));
+    const set = new Set(monthCounts.map((c) => c.year));
     if (active) {
       set.add(active.year);
     }
     return Array.from(set).sort((a, b) => b - a);
-  }, [counts, active]);
+  }, [monthCounts, active]);
 
   const selectedYear = browsedYear ?? active?.year ?? years[0];
   const pageCount = Math.max(1, Math.ceil(years.length / YEARS_PER_PAGE));
-  const page = Math.min(yearPage, pageCount - 1);
+  const selectedYearPage =
+    selectedYear === undefined
+      ? 0
+      : Math.floor(Math.max(0, years.indexOf(selectedYear)) / YEARS_PER_PAGE);
+  const page = Math.min(yearPageOverride ?? selectedYearPage, pageCount - 1);
   const visibleYears = years.slice(page * YEARS_PER_PAGE, (page + 1) * YEARS_PER_PAGE);
 
   const monthCount = useCallback(
     (year: number, month: number) =>
-      counts.find((c) => c.year === year && c.month === month)?.count ?? 0,
-    [counts],
+      monthCounts.find((c) => c.year === year && c.month === month)?.count ?? 0,
+    [monthCounts],
   );
   const yearCount = (year: number) =>
-    counts.filter((c) => c.year === year).reduce((sum, c) => sum + c.count, 0);
+    monthCounts.filter((c) => c.year === year).reduce((sum, c) => sum + c.count, 0);
+
+  const toggleOpen = () => {
+    if (!isOpen) {
+      setBrowsedYear(undefined);
+      setYearPageOverride(undefined);
+    }
+    setIsOpen(!isOpen);
+  };
 
   const apply = (value: DateFilterValue) => {
-    const others = uiStore.searchCriteriaList.filter((crit) => !isDateFilterCriterion(crit));
-    // Toggling the value that is already active clears it
+    // Only the pair this filter made is replaced; other terms, including hand-typed date terms, stay
+    const others = withoutDateFilter(uiStore.searchCriteriaList);
+    // Choosing the value that is already active clears it
     if (sameValue(active, value)) {
       uiStore.replaceSearchCriterias(others);
     } else {
@@ -85,36 +120,76 @@ const DateFilter = observer(() => {
   };
 
   const clear = () => {
-    uiStore.replaceSearchCriterias(
-      uiStore.searchCriteriaList.filter((crit) => !isDateFilterCriterion(crit)),
-    );
+    uiStore.replaceSearchCriterias(withoutDateFilter(uiStore.searchCriteriaList));
     setBrowsedYear(undefined);
+    setYearPageOverride(undefined);
   };
 
-  const hasDateFilter = active !== undefined || hasUnreadableDateFilter;
   // With "match any", the two halves of the range would be combined with OR and match every file
   const blockedByMatchAny = uiStore.searchMatchAny;
+
+  const handleMonthKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const cells = Array.from(
+      e.currentTarget.querySelectorAll<HTMLButtonElement>('.date-filter__month'),
+    );
+    let index = cells.indexOf(document.activeElement as HTMLButtonElement);
+    if (index === -1) {
+      return;
+    }
+    // Skip over disabled months in the direction of travel
+    for (;;) {
+      const next = gridMove(index, e.key, MONTH_COLUMNS, cells.length);
+      if (next === index) {
+        return;
+      }
+      if (!cells[next].disabled) {
+        e.preventDefault();
+        cells[next].focus();
+        return;
+      }
+      index = next;
+    }
+  };
+
+  const buttonTooltip =
+    active && blockedByMatchAny
+      ? 'The date filter has no effect while search matches any term'
+      : 'Filter by year or month';
 
   return (
     <Flyout
       isOpen={isOpen}
       cancel={() => setIsOpen(false)}
+      ignoreCloseForElementOnBlur={targetRef.current?.querySelector('button') ?? undefined}
       label="Filter by date"
       placement="bottom"
       target={(ref) => (
-        <div ref={ref} className="date-filter-target">
+        <div
+          ref={(element: HTMLDivElement | null) => {
+            ref(element);
+            targetRef.current = element;
+          }}
+          className="date-filter-target"
+          tabIndex={-1}
+          // Flyout hands focus back to this wrapper on Escape; pass it on to the real button
+          onFocus={(e) => {
+            if (e.target === e.currentTarget) {
+              targetRef.current?.querySelector('button')?.focus();
+            }
+          }}
+        >
           <ToolbarButton
             icon={IconSet.FILTER_DATE}
             text={dateFilterLabel(active)}
-            tooltip="Filter by year or month"
-            onClick={() => setIsOpen((open) => !open)}
-            pressed={hasDateFilter}
+            tooltip={buttonTooltip}
+            onClick={toggleOpen}
+            pressed={active !== undefined}
             isCollapsible={false}
           />
         </div>
       )}
     >
-      <div className="date-filter">
+      <div className="date-filter" ref={popoverRef} tabIndex={-1}>
         {blockedByMatchAny && (
           <p className="date-filter__notice">
             Search is set to match any term, which cannot be combined with a date range.{' '}
@@ -129,7 +204,11 @@ const DateFilter = observer(() => {
           </p>
         )}
 
-        {years.length === 0 ? (
+        {countsFailed && counts === undefined ? (
+          <p className="date-filter__empty">Could not load the number of photos per month</p>
+        ) : counts === undefined ? (
+          <p className="date-filter__empty">Loading…</p>
+        ) : years.length === 0 ? (
           <p className="date-filter__empty">No photos yet</p>
         ) : (
           <>
@@ -138,7 +217,7 @@ const DateFilter = observer(() => {
                 type="button"
                 aria-label="Newer years"
                 disabled={page === 0}
-                onClick={() => setYearPage(page - 1)}
+                onClick={() => setYearPageOverride(page - 1)}
               >
                 {IconSet.ARROW_LEFT}
               </button>
@@ -157,7 +236,7 @@ const DateFilter = observer(() => {
                 type="button"
                 aria-label="Earlier years"
                 disabled={page >= pageCount - 1}
-                onClick={() => setYearPage(page + 1)}
+                onClick={() => setYearPageOverride(page + 1)}
               >
                 {IconSet.ARROW_RIGHT}
               </button>
@@ -169,7 +248,10 @@ const DateFilter = observer(() => {
                   type="button"
                   className="date-filter__whole-year"
                   aria-pressed={sameValue(active, { year: selectedYear })}
-                  disabled={blockedByMatchAny || yearCount(selectedYear) === 0}
+                  disabled={
+                    blockedByMatchAny ||
+                    (yearCount(selectedYear) === 0 && !sameValue(active, { year: selectedYear }))
+                  }
                   onClick={() => apply({ year: selectedYear })}
                 >
                   <span>Whole year</span>
@@ -182,6 +264,7 @@ const DateFilter = observer(() => {
                   className="date-filter__months"
                   role="group"
                   aria-label={`Months of ${selectedYear}`}
+                  onKeyDown={handleMonthKeyDown}
                 >
                   {MONTH_LABELS.map((label, month) => {
                     const count = monthCount(selectedYear, month);
@@ -209,7 +292,7 @@ const DateFilter = observer(() => {
         )}
 
         <footer className="date-filter__footer">
-          <button type="button" onClick={clear} disabled={!hasDateFilter}>
+          <button type="button" onClick={clear} disabled={active === undefined}>
             Clear
           </button>
         </footer>

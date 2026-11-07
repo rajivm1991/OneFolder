@@ -443,6 +443,8 @@ export default class Backend implements DataStorage {
   }
 
   async countFilesByMonth(): Promise<MonthCount[]> {
+    // Legacy backend, only used to migrate to SQLite. Reading the dates through the dateCreated index
+    // (`orderBy('dateCreated').keys()`) returned nothing under fake-indexeddb, so read the records instead.
     const dates = (await this.#files.toArray()).map((file) => file.dateCreated);
     return countByMonth(dates);
   }
