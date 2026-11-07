@@ -1,7 +1,6 @@
 import { observer } from 'mobx-react-lite';
 import React, { useEffect, useState } from 'react';
 
-import { IS_MAC } from 'common/process';
 import { WindowSystemButtonPress } from 'src/ipc/messages';
 import { RendererMessenger } from 'src/ipc/renderer';
 import { IconSet } from 'widgets/icons';
@@ -25,7 +24,7 @@ const WindowsTitlebar = () => {
 
       <WindowTitlebar />
 
-      {!IS_MAC && <WindowSystemButtons />}
+      <WindowSystemButtons />
     </div>
   );
 };

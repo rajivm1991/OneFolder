@@ -96,7 +96,7 @@ function createWindow() {
 
   const mainOptions: BrowserWindowConstructorOptions = {
     titleBarStyle: 'hidden',
-    // Disable native frame: we use a custom titlebar for all platforms: a unique one for MacOS, and one for windows/linux
+    // Disable native frame: windows/linux use a custom titlebar; macOS has none and uses native traffic lights inset into the toolbar
     frame: false,
     webPreferences: {
       nodeIntegration: true,

@@ -8,6 +8,8 @@ const SplashScreen = () => {
   const splashScreenContainerStyles: React.CSSProperties = {
     width: '100vw',
     height: '100vh',
+    // Same as the window background colour before macOS vibrancy made the window transparent
+    background: '#1c1e23',
   };
 
   const splashScreenStyles: React.CSSProperties = {

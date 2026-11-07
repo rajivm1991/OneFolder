@@ -101,6 +101,18 @@ body {
     }
   }
 
+  // The OS ignores z-index when hit-testing drag regions, so popovers, menus and dialogs that overlap the
+  // toolbar strip must opt out too, otherwise the overlapping part cannot be clicked
+  [data-flyout],
+  [data-contextmenu],
+  [role='menu'],
+  [role='listbox'],
+  [role='grid'],
+  [role='tooltip'],
+  dialog {
+    -webkit-app-region: no-drag;
+  }
+
   #outliner {
     background: transparent;
 
@@ -124,9 +136,15 @@ body {
     }
   }
 
-  // Sidebar collapsed: the traffic lights now sit over the toolbar, so leave room for them
-  &[data-outliner-open='false']:not([data-fullscreen='true']) #toolbar {
-    padding-left: var(--mac-system-buttons-width);
+  // Sidebar collapsed: the traffic lights now sit over the toolbar, so leave room for them. Kept in full
+  // screen too, so the toolbar does not shift when entering or leaving it.
+  &[data-outliner-open='false'] #toolbar {
+    padding-left: calc(var(--mac-system-buttons-width) + 0.5rem);
+  }
+
+  // If the app crashes, the error screen replaces the opaque surfaces, so give the window a background
+  &:has(.error-boundary) {
+    background: var(--background-color);
   }
 }
 
