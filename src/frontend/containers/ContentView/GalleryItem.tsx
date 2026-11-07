@@ -81,6 +81,12 @@ export const MasonryCell = observer(
             isSlideMode={uiStore.isSlideMode}
           />
         </div>
+        {isFileExtensionVideo(file.extension) && (
+          <span className="thumbnail-video-badge" aria-label="Video">
+            {IconSet.PLAY}
+          </span>
+        )}
+
         {file.isBroken === true && !fileStore.showsMissingContent && (
           <IconButton
             className="thumbnail-broken-overlay"

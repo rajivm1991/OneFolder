@@ -101,6 +101,35 @@
   filter: saturate(0) brightness(0.25);
 }
 
+// Marks video tiles so they are distinguishable from images (also when playback is disabled).
+// Sits on top of the thumbnail content, not the themed background, so it uses a fixed dark
+// circle with a light glyph (same approach as .thumbnail-overlay) to stay legible in both light and dark themes.
+.thumbnail-video-badge {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background-color: rgba(0, 0, 0, 0.6);
+  color: rgb(230, 230, 230);
+  pointer-events: none;
+
+  svg {
+    width: 1rem;
+    height: 1rem;
+
+    // The icon's path has hardcoded dark fill/stroke attributes; override them
+    path {
+      fill: currentColor;
+      stroke: currentColor;
+    }
+  }
+}
+
 .thumbnail-broken-overlay {
   cursor: pointer;
   position: absolute;
