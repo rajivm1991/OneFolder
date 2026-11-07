@@ -189,17 +189,9 @@
     min-height: 1.5rem;
 
     &:active,
-    &:hover,
-    &[aria-pressed='true'],
-    &[aria-checked='true'] {
+    &:hover {
       color: var(--accent-color);
     }
-  }
-
-  span {
-    margin: 0 0.125rem;
-    font-size: 0.6875rem;
-    font-weight: bold;
   }
 }
 

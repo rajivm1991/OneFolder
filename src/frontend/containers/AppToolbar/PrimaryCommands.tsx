@@ -70,7 +70,8 @@ const PrimaryCommands = observer(() => {
 
       <Searchbar />
 
-      <LayoutSwitch />
+      {/* Calendar has its own grid/list toggle in ViewCommand; this goes away with the Calendar view */}
+      {!uiStore.isCalendar && <LayoutSwitch />}
 
       {/* <ViewCommand /> */}
       {(uiStore.isMasonry || uiStore.isCalendar) && <ViewCommand />}

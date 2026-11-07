@@ -98,6 +98,7 @@ export const OutlinerActionBar = observer(() => {
             onClick={handleReIndexClick}
             text={isReIndexing ? 're-indexing library…' : 're-index library…'}
             disabled={isReIndexing}
+            accelerator={<KeyCombo combo="ctrl+shift+R" />}
           />
           <MenuItem
             icon={IconSet.THUMB_BG}
