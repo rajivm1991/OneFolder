@@ -2,9 +2,7 @@ import { observer } from 'mobx-react-lite';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 
 import { MonthCount } from 'src/api/data-storage';
-import { IconSet } from 'widgets';
 import { Flyout } from 'widgets/popovers';
-import { ToolbarButton } from 'widgets/toolbar';
 import { useStore } from '../../contexts/StoreContext';
 import {
   DateFilterValue,
@@ -178,14 +176,43 @@ const DateFilter = observer(() => {
             }
           }}
         >
-          <ToolbarButton
-            icon={IconSet.FILTER_DATE}
-            text={dateFilterLabel(active)}
-            tooltip={buttonTooltip}
+          <button
+            type="button"
+            className={`date-filter__trigger${active !== undefined ? ' is-active' : ''}`}
+            aria-haspopup="dialog"
+            aria-expanded={isOpen}
+            title={buttonTooltip}
             onClick={toggleOpen}
-            pressed={active !== undefined}
-            isCollapsible={false}
-          />
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.9"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="4" width="18" height="17" rx="3" />
+              <path d="M3 10h18M8 2v4M16 2v4" />
+            </svg>
+            {dateFilterLabel(active)}
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
         </div>
       )}
     >
@@ -215,13 +242,27 @@ const DateFilter = observer(() => {
             <div className="date-filter__years" role="group" aria-label="Year">
               <button
                 type="button"
-                aria-label="Newer years"
-                disabled={page === 0}
-                onClick={() => setYearPageOverride(page - 1)}
+                className="date-filter__icon-btn"
+                aria-label="Earlier years"
+                disabled={page >= pageCount - 1}
+                onClick={() => setYearPageOverride(page + 1)}
               >
-                {IconSet.ARROW_LEFT}
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M15 6l-6 6 6 6" />
+                </svg>
               </button>
-              {visibleYears.map((year) => (
+              {/* Oldest first, so the newest year is at the right */}
+              {[...visibleYears].reverse().map((year) => (
                 <button
                   type="button"
                   key={year}
@@ -232,14 +273,29 @@ const DateFilter = observer(() => {
                   {year}
                 </button>
               ))}
-              <button
-                type="button"
-                aria-label="Earlier years"
-                disabled={page >= pageCount - 1}
-                onClick={() => setYearPageOverride(page + 1)}
-              >
-                {IconSet.ARROW_RIGHT}
-              </button>
+              {/* Only after going back: the way to the newer years again (the mockup shows the newest page) */}
+              {page > 0 && (
+                <button
+                  type="button"
+                  className="date-filter__icon-btn"
+                  aria-label="Later years"
+                  onClick={() => setYearPageOverride(page - 1)}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
+              )}
             </div>
 
             {selectedYear !== undefined && (
@@ -292,7 +348,18 @@ const DateFilter = observer(() => {
         )}
 
         <footer className="date-filter__footer">
-          <button type="button" onClick={clear} disabled={active === undefined}>
+          <span className="date-filter__summary">
+            {active !== undefined &&
+              `Showing ${fileStore.fileList.length.toLocaleString()} ${
+                fileStore.fileList.length === 1 ? 'item' : 'items'
+              } from ${dateFilterLabel(active)}`}
+          </span>
+          <button
+            type="button"
+            className="date-filter__clear"
+            onClick={clear}
+            disabled={active === undefined}
+          >
             Clear
           </button>
         </footer>
