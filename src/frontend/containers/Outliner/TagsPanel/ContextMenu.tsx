@@ -5,7 +5,7 @@ import { HexColorPicker } from 'react-colorful';
 import { IconSet } from 'widgets';
 import { Menu, MenuCheckboxItem, MenuDivider, MenuItem, MenuSubItem } from 'widgets/menus';
 import { useStore } from '../../../contexts/StoreContext';
-import { ClientTagSearchCriteria } from '../../../entities/SearchCriteria';
+import { tagFilterCriteria } from '../filter-utils';
 import { ClientTag } from '../../../entities/Tag';
 import { Action, Factory } from './state';
 
@@ -127,7 +127,7 @@ export const TagItemContextMenu = observer((props: IContextMenuProps) => {
         onClick={() =>
           tag.isSelected
             ? uiStore.addTagSelectionToCriteria()
-            : uiStore.addSearchCriteria(new ClientTagSearchCriteria('tags', tag.id))
+            : uiStore.addSearchCriteria(tagFilterCriteria(tag.id))
         }
         text="Add to Search"
         icon={IconSet.SEARCH}
@@ -136,7 +136,7 @@ export const TagItemContextMenu = observer((props: IContextMenuProps) => {
         onClick={() =>
           tag.isSelected
             ? uiStore.replaceCriteriaWithTagSelection()
-            : uiStore.replaceSearchCriteria(new ClientTagSearchCriteria('tags', tag.id))
+            : uiStore.replaceSearchCriteria(tagFilterCriteria(tag.id))
         }
         text="Replace Search"
         icon={IconSet.REPLACE}

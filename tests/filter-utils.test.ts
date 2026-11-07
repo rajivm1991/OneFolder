@@ -12,6 +12,7 @@ import {
   isUntaggedFilter,
   toggleInGroup,
   toggleLocationFilter,
+  tagFilterCriteria,
   toggleTagFilter,
 } from '../src/frontend/containers/Outliner/filter-utils';
 
@@ -149,7 +150,7 @@ describe('tag filter', () => {
 
   it('clearTagFilters removes only the tag filters', () => {
     const place = new ClientStringSearchCriteria('absolutePath', '/photos/', 'startsWith');
-    const ui = fakeUiStore([new ClientTagSearchCriteria('tags', 'a'), place]);
+    const ui = fakeUiStore([tagFilterCriteria('a'), place]);
     clearTagFilters(ui);
     expect(ui.searchCriteriaList).toEqual([place]);
   });
@@ -166,7 +167,7 @@ describe('location filter', () => {
   });
 
   it('clicking the chosen folder again clears it, and tags are untouched', () => {
-    const tag = new ClientTagSearchCriteria('tags', 'a');
+    const tag = tagFilterCriteria('a');
     const ui = fakeUiStore([tag]);
     toggleLocationFilter(ui, '/a', false);
     toggleLocationFilter(ui, '/a', false);

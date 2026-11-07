@@ -38,14 +38,19 @@ export function toggleInGroup<C>(
   return [...others, ...next];
 }
 
-/** A tag, or Untagged (no value), chosen from the Tags filter. Other tag terms, like "does not have", are not part of it. */
+/** A tag, or Untagged (no value), chosen from the Tags filter. Tag terms typed in the search bar are not part of it. */
 export const isTagFilter = (c: ClientFileSearchCriteria): c is ClientTagSearchCriteria =>
-  c instanceof ClientTagSearchCriteria && c.key === 'tags' && c.operator === 'containsRecursively';
+  c instanceof ClientTagSearchCriteria && c.filterGroup === 'tags';
 
 export const isUntaggedFilter = (c: ClientFileSearchCriteria): boolean =>
   isTagFilter(c) && !c.value;
 
-export const tagFilterCriteria = (tagId?: string) => new ClientTagSearchCriteria('tags', tagId);
+/** Tags chosen in the sidebar match if any one of them does (see criteriaToConditions) */
+export const tagFilterCriteria = (tagId?: string) => {
+  const criteria = new ClientTagSearchCriteria('tags', tagId);
+  criteria.filterGroup = 'tags';
+  return criteria;
+};
 
 /** Add an additional / or \ in order to enforce files only in the specific directory are found, not in those starting with same name */
 export const pathAsSearchPath = (path: string): string => `${path}${SysPath.sep}`;
@@ -84,9 +89,15 @@ export function toggleLocationFilter(uiStore: UiStore, path: string, additive: b
 
 /** A folder chosen from the Locations filter */
 export const isLocationFilter = (c: ClientFileSearchCriteria): c is ClientStringSearchCriteria =>
-  c instanceof ClientStringSearchCriteria &&
-  c.key === 'absolutePath' &&
-  c.operator === 'startsWith';
+  c instanceof ClientStringSearchCriteria && c.filterGroup === 'locations';
 
-export const locationFilterCriteria = (path: string) =>
-  new ClientStringSearchCriteria('absolutePath', pathAsSearchPath(path), 'startsWith');
+/** Folders chosen in the sidebar match if any one of them does (see criteriaToConditions) */
+export const locationFilterCriteria = (path: string) => {
+  const criteria = new ClientStringSearchCriteria(
+    'absolutePath',
+    pathAsSearchPath(path),
+    'startsWith',
+  );
+  criteria.filterGroup = 'locations';
+  return criteria;
+};

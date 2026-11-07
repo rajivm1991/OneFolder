@@ -27,6 +27,9 @@ import RootStore from '../stores/RootStore';
 // A dictionary of labels for (some of) the keys of the type we search for
 export type SearchKeyDict = Partial<Record<keyof FileDTO, string>>;
 
+/** The sidebar filters. Within one group the chosen rows are alternatives (OR); different groups combine with AND. */
+export type FilterGroup = 'tags' | 'locations';
+
 export const CustomKeyDict: SearchKeyDict = {
   absolutePath: 'Path',
   locationId: 'Location',
@@ -58,6 +61,12 @@ export abstract class ClientFileSearchCriteria implements IBaseSearchCriteria {
   @observable public operator: OperatorType;
 
   private disposers: Lambda[] = [];
+
+  /**
+   * Set when the sidebar made this criterion (a tag or a folder). Criteria of the same group match if any one of
+   * them does; see criteriaToConditions. Criteria typed in the search bar have no group.
+   */
+  public filterGroup?: FilterGroup;
 
   constructor(
     key: keyof FileDTO,
@@ -292,4 +301,34 @@ export class ClientDateSearchCriteria extends ClientFileSearchCriteria {
   @action.bound setValue(date: Date): void {
     this.value = date;
   }
+}
+
+/**
+ * The conditions to search with. Criteria of the same sidebar group (tags, folders) become one condition that
+ * matches if any of them does, so the groups combine with AND while the rows inside a group are alternatives.
+ * With "match any" on, everything is already an alternative and nothing is grouped.
+ */
+export function criteriaToConditions(
+  criteria: readonly ClientFileSearchCriteria[],
+  rootStore: RootStore,
+  matchAny: boolean,
+): ConditionDTO<FileDTO>[] {
+  if (matchAny) {
+    return criteria.map((c) => c.toCondition(rootStore));
+  }
+  const conditions: ConditionDTO<FileDTO>[] = [];
+  const groups = new Map<FilterGroup, ConditionDTO<FileDTO>[]>();
+  for (const c of criteria) {
+    if (c.filterGroup === undefined) {
+      conditions.push(c.toCondition(rootStore));
+    } else {
+      groups.set(c.filterGroup, [...(groups.get(c.filterGroup) ?? []), c.toCondition(rootStore)]);
+    }
+  }
+  for (const alternatives of groups.values()) {
+    conditions.push(
+      alternatives.length === 1 ? alternatives[0] : { valueType: 'or', conditions: alternatives },
+    );
+  }
+  return conditions;
 }

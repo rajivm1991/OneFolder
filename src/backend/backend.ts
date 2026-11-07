@@ -7,6 +7,7 @@ import {
   ConditionDTO,
   DateConditionDTO,
   NumberConditionDTO,
+  OrConditionDTO,
   OrderBy,
   OrderDirection,
   StringConditionDTO,
@@ -468,13 +469,22 @@ type SearchConjunction = 'and' | 'or';
 
 async function filter<T>(
   collection: Dexie.Table<T, ID>,
-  criterias: [ConditionDTO<T>, ...ConditionDTO<T>[]],
+  allCriterias: [ConditionDTO<T>, ...ConditionDTO<T>[]],
   conjunction: SearchConjunction,
 ): Promise<Dexie.Collection<T, string>> {
   // Searching with multiple 'wheres': https://stackoverflow.com/questions/35679590/dexiejs-indexeddb-chain-multiple-where-clauses
   // Unfortunately doesn't work out of the box.
   // It's one of the things they are working on, looks much better: https://github.com/dfahlander/Dexie.js/issues/427
   // We'll have to mostly rely on naive filter function (lambdas)
+
+  // A group of alternatives has no single key to look up by: use the naive filter
+  if (allCriterias.some((crit) => crit.valueType === 'or')) {
+    const lambdas = allCriterias.map((crit) => filterLambda(crit));
+    const combine = conjunction === 'or' ? 'some' : 'every';
+    return collection.filter((t) => lambdas[combine]((lambda) => lambda(t)));
+  }
+  type SingleCondition = Exclude<ConditionDTO<T>, OrConditionDTO<T>>;
+  const criterias = allCriterias as [SingleCondition, ...SingleCondition[]];
 
   if (criterias.length > 1 && conjunction === 'or') {
     // OR: We can only chain ORs if all filters can be "where" functions - else we do an ugly .some() check on every document
@@ -537,6 +547,8 @@ function filterWhere<T>(
   crit: ConditionDTO<T>,
 ): Collection<T, string> | ((val: T) => boolean) {
   switch (crit.valueType) {
+    case 'or':
+      return filterLambda(crit);
     case 'array':
       return filterArrayWhere(where, crit);
     case 'string':
@@ -550,6 +562,10 @@ function filterWhere<T>(
 
 export function filterLambda<T>(crit: ConditionDTO<T>): (val: T) => boolean {
   switch (crit.valueType) {
+    case 'or': {
+      const lambdas = crit.conditions.map((c) => filterLambda(c));
+      return (val: T) => lambdas.some((lambda) => lambda(val));
+    }
     case 'array':
       return filterArrayLambda(crit);
     case 'string':
