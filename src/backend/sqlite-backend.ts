@@ -12,8 +12,8 @@ import { PersonDTO } from '../api/person';
 import { FileSearchDTO } from '../api/file-search';
 import { ROOT_TAG_ID, TagDTO } from '../api/tag';
 import { VisualHashDTO } from '../api/visual-hash';
-import { DataStorage } from '../api/data-storage';
-import { filterLambda } from './backend';
+import { DataStorage, MonthCount } from '../api/data-storage';
+import { countByMonth, filterLambda } from './backend';
 import { initSqliteSchema } from './sqlite-schema';
 
 type TagRow = {
@@ -165,9 +165,7 @@ export class SqliteBackend implements DataStorage {
   async removeTags(tags: ID[]): Promise<void> {
     const run = this.#db.transaction((tagIds: ID[]) => {
       const placeholders = tagIds.map(() => '?').join(',');
-      this.#db
-        .prepare(`DELETE FROM file_tags WHERE tag_id IN (${placeholders})`)
-        .run(...tagIds);
+      this.#db.prepare(`DELETE FROM file_tags WHERE tag_id IN (${placeholders})`).run(...tagIds);
       this.#db.prepare(`DELETE FROM tag_subtags WHERE tag_id IN (${placeholders})`).run(...tagIds);
       this.#db
         .prepare(`DELETE FROM tag_subtags WHERE sub_tag_id IN (${placeholders})`)
@@ -181,10 +179,9 @@ export class SqliteBackend implements DataStorage {
   async mergeTags(tagToBeRemoved: ID, tagToMergeWith: ID): Promise<void> {
     const run = this.#db.transaction((removed: ID, mergeWith: ID) => {
       // Re-point file_tags rows, ignoring ones that would collide with an existing (file, mergeWith) row
-      this.#db.prepare(`UPDATE OR IGNORE file_tags SET tag_id = ? WHERE tag_id = ?`).run(
-        mergeWith,
-        removed,
-      );
+      this.#db
+        .prepare(`UPDATE OR IGNORE file_tags SET tag_id = ? WHERE tag_id = ?`)
+        .run(mergeWith, removed);
       this.#db.prepare('DELETE FROM file_tags WHERE tag_id = ?').run(removed);
       this.#db.prepare('DELETE FROM tags WHERE id = ?').run(removed);
     });
@@ -261,7 +258,9 @@ export class SqliteBackend implements DataStorage {
 
   async createSearch(search: FileSearchDTO): Promise<void> {
     this.#db
-      .prepare('INSERT INTO searches (id, name, criteria, matchAny, "index") VALUES (?, ?, ?, ?, ?)')
+      .prepare(
+        'INSERT INTO searches (id, name, criteria, matchAny, "index") VALUES (?, ?, ?, ?, ?)',
+      )
       .run(
         search.id,
         search.name,
@@ -341,7 +340,11 @@ export class SqliteBackend implements DataStorage {
 
   async fetchFiles(order: OrderBy<FileDTO>, fileOrder: OrderDirection): Promise<FileDTO[]> {
     const rows = this.#db.prepare('SELECT * FROM files').all() as any[];
-    return this.#sortAndOrder(rows.map((r) => this.#rowToFile(r)), order, fileOrder);
+    return this.#sortAndOrder(
+      rows.map((r) => this.#rowToFile(r)),
+      order,
+      fileOrder,
+    );
   }
 
   async fetchFilesByID(ids: ID[]): Promise<FileDTO[]> {
@@ -477,12 +480,21 @@ export class SqliteBackend implements DataStorage {
 
   async createDismissedDuplicateGroup(group: DismissedDuplicateGroupDTO): Promise<void> {
     const run = this.#db.transaction((g: DismissedDuplicateGroupDTO) => {
-      this.#db.prepare('DELETE FROM dismissed_duplicate_groups WHERE groupHash = ?').run(g.groupHash);
+      this.#db
+        .prepare('DELETE FROM dismissed_duplicate_groups WHERE groupHash = ?')
+        .run(g.groupHash);
       this.#db
         .prepare(
           'INSERT INTO dismissed_duplicate_groups (id, groupHash, algorithm, fileIds, dismissedAt, userNote) VALUES (?, ?, ?, ?, ?, ?)',
         )
-        .run(g.id, g.groupHash, g.algorithm, g.fileIds, g.dismissedAt.toISOString(), g.userNote ?? null);
+        .run(
+          g.id,
+          g.groupHash,
+          g.algorithm,
+          g.fileIds,
+          g.dismissedAt.toISOString(),
+          g.userNote ?? null,
+        );
     });
     run(group);
     this.#notifyChange();
@@ -544,7 +556,9 @@ export class SqliteBackend implements DataStorage {
       return;
     }
     const placeholders = absolutePaths.map(() => '?').join(',');
-    this.#db.prepare(`DELETE FROM visual_hashes WHERE absolutePath IN (${placeholders})`).run(...absolutePaths);
+    this.#db
+      .prepare(`DELETE FROM visual_hashes WHERE absolutePath IN (${placeholders})`)
+      .run(...absolutePaths);
     this.#notifyChange();
   }
 
@@ -658,7 +672,8 @@ export class SqliteBackend implements DataStorage {
   }
 
   async countFiles(): Promise<[fileCount: number, untaggedFileCount: number]> {
-    const fileCount = (this.#db.prepare('SELECT COUNT(*) as c FROM files').get() as { c: number }).c;
+    const fileCount = (this.#db.prepare('SELECT COUNT(*) as c FROM files').get() as { c: number })
+      .c;
     const untaggedFileCount = (
       this.#db
         .prepare(
@@ -667,6 +682,13 @@ export class SqliteBackend implements DataStorage {
         .get() as { c: number }
     ).c;
     return [fileCount, untaggedFileCount];
+  }
+
+  async countFilesByMonth(): Promise<MonthCount[]> {
+    const rows = this.#db.prepare('SELECT dateCreated FROM files').all() as {
+      dateCreated: string;
+    }[];
+    return countByMonth(rows.map((row) => new Date(row.dateCreated)));
   }
 
   async clearFilesOnly(): Promise<void> {

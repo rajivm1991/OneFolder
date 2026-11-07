@@ -1,7 +1,7 @@
 import Dexie, { Collection, IndexableType, Table, WhereClause } from 'dexie';
 
 import { retainArray, shuffleArray } from '../../common/core';
-import { DataStorage } from '../api/data-storage';
+import { DataStorage, MonthCount } from '../api/data-storage';
 import {
   ArrayConditionDTO,
   ConditionDTO,
@@ -442,6 +442,11 @@ export default class Backend implements DataStorage {
     });
   }
 
+  async countFilesByMonth(): Promise<MonthCount[]> {
+    const dates = (await this.#files.toArray()).map((file) => file.dateCreated);
+    return countByMonth(dates);
+  }
+
   // Creates many files at once, and checks for duplicates in the path they are in
   async createFilesFromPath(path: string, files: FileDTO[]): Promise<void> {
     console.info('IndexedDB: Creating files...', path, files);
@@ -685,6 +690,26 @@ function filterNumberLambda<T>(crit: NumberConditionDTO<T>): (t: any) => boolean
       const _exhaustiveCheck: never = crit.operator;
       return _exhaustiveCheck;
   }
+}
+
+/** Counts dates per (year, month) in local time, the same time zone the date filter compares in. Newest month first. */
+export function countByMonth(dates: Date[]): MonthCount[] {
+  const counts = new Map<string, MonthCount>();
+  for (const date of dates) {
+    if (Number.isNaN(date.getTime())) {
+      continue;
+    }
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    const key = `${year}-${month}`;
+    const entry = counts.get(key);
+    if (entry) {
+      entry.count++;
+    } else {
+      counts.set(key, { year, month, count: 1 });
+    }
+  }
+  return Array.from(counts.values()).sort((a, b) => b.year - a.year || b.month - a.month);
 }
 
 function filterDateWhere<T>(

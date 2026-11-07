@@ -6,6 +6,7 @@ import { ToolbarButton } from 'widgets/toolbar';
 import { FileRemoval } from '../../components/RemovalAlert';
 import FileTagEditor from '../../containers/AppToolbar/FileTagEditor';
 import { useStore } from '../../contexts/StoreContext';
+import DateFilter from './DateFilter';
 import { SortCommand } from './Menus';
 import { ViewCommand } from './Menus';
 import Searchbar from './Searchbar';
@@ -69,6 +70,8 @@ const PrimaryCommands = observer(() => {
       <FileSelectionCommand />
 
       <Searchbar />
+
+      <DateFilter />
 
       {/* Calendar has its own grid/list toggle in ViewCommand; this goes away with the Calendar view */}
       {!uiStore.isCalendar && <LayoutSwitch />}
