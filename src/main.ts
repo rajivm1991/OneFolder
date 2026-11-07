@@ -18,7 +18,7 @@ import { autoUpdater, UpdateInfo } from 'electron-updater';
 import TrayIcon from '../resources/logo/png/full-color/onefolder-logomark-fc-256x256.png';
 import AppIcon from '../resources/logo/png/full-color/onefolder-logomark-fc-512x512.png';
 import { createBugReport, githubUrl } from '../common/config';
-import { IS_DEV } from '../common/process';
+import { IS_DEV, IS_MAC } from '../common/process';
 import { MainMessenger } from './ipc/main';
 import { WindowSystemButtonPress } from './ipc/messages';
 import {
@@ -111,6 +111,17 @@ function createWindow() {
     backgroundColor: '#1c1e23',
     title: 'OneFolder',
     show: false, // only show once initial loading is finished
+    // macOS: native traffic lights inset into our top bar, and a translucent (vibrancy) sidebar.
+    // The window background must be transparent for the vibrancy to show through; opaque surfaces
+    // (toolbar, content) cover it with their own CSS backgrounds.
+    ...(IS_MAC
+      ? {
+          trafficLightPosition: { x: 20, y: 20 },
+          vibrancy: 'sidebar' as const,
+          visualEffectState: 'followWindow' as const,
+          backgroundColor: '#00000000',
+        }
+      : {}),
     ...previousWindowState,
   };
 

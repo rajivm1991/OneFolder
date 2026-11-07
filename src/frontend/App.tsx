@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect } from 'react';
 import { observer } from 'mobx-react-lite';
 
+import { IS_MAC } from 'common/process';
 import { useStore } from './contexts/StoreContext';
 
 import ErrorBoundary from './containers/ErrorBoundary';
@@ -49,10 +50,12 @@ const App = observer(() => {
         <div
           data-os={PLATFORM}
           data-fullscreen={uiStore.isFullScreen}
+          data-outliner-open={isOutlinerOpen}
           id="layout-container"
           className={uiStore.theme}
         >
-          {!uiStore.isFullScreen && <WindowTitlebar />}
+          {/* macOS uses native traffic lights inset into the toolbar instead of a custom title bar */}
+          {!uiStore.isFullScreen && !IS_MAC && <WindowTitlebar />}
 
           <ErrorBoundary>
             <Main />
