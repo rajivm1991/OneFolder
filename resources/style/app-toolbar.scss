@@ -13,29 +13,6 @@
   }
 }
 
-// Grid/List segmented control
-.layout-switch {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  margin: 0 0.25rem;
-  border-radius: 0.5rem;
-  background: var(--hover-color);
-
-  .toolbar-button {
-    min-height: 1.5rem;
-    min-width: 1.75rem;
-    border-radius: 0.375rem;
-
-    // The active layout: raised and bold (not colour alone)
-    &[aria-pressed='true'] {
-      background: var(--background-color);
-      color: var(--text-color-strong);
-      box-shadow: 0 0 0 0.5px var(--border-color), 0 1px 2px rgba(0, 0, 0, 0.2);
-    }
-  }
-}
-
 // Date filter popover: year chips, whole-year row and a 4x3 month grid
 .date-filter {
   width: 20rem;

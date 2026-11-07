@@ -55,6 +55,8 @@
   &[aria-selected='true'] > .label {
     background-color: var(--background-color-selected);
     color: var(--text-color-strong);
+    // Not colour alone
+    font-weight: 600;
 
     > .tree-content-label,
     > .tree-content-label * {

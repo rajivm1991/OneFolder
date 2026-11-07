@@ -1,4 +1,4 @@
-import { OrderDirection } from '../src/api/data-storage-search';
+import { ConditionDTO, OrderDirection } from '../src/api/data-storage-search';
 import { FileDTO } from '../src/api/file';
 import { ROOT_TAG_ID, TagDTO } from '../src/api/tag';
 import Backend from '../src/backend/backend';
@@ -168,5 +168,35 @@ describe('Backend', () => {
       { year: 2024, month: 2, count: 2 },
       { year: 2023, month: 11, count: 1 },
     ]);
+  });
+
+  test('searchFiles matches a group of alternatives and ANDs it with other conditions', async (backend) => {
+    const files = createMockFiles(3);
+    files[0].tags = ['t1'];
+    files[1].tags = ['t2'];
+    files[2].tags = ['t3'];
+    files[1].name = 'special.jpg';
+    files[2].name = 'special.jpg';
+    await backend.saveFiles(files);
+
+    const anyOfT1T2: ConditionDTO<FileDTO> = {
+      valueType: 'or',
+      conditions: [
+        { key: 'tags', valueType: 'array', operator: 'contains', value: ['t1'] },
+        { key: 'tags', valueType: 'array', operator: 'contains', value: ['t2'] },
+      ],
+    };
+    const nameIsSpecial: ConditionDTO<FileDTO> = {
+      key: 'name',
+      valueType: 'string',
+      operator: 'equals',
+      value: 'special.jpg',
+    };
+
+    const either = await backend.searchFiles(anyOfT1T2, 'id', OrderDirection.Asc);
+    expect(either.map((f) => f.id)).toEqual(['0', '1']);
+
+    const both = await backend.searchFiles([anyOfT1T2, nameIsSpecial], 'id', OrderDirection.Asc);
+    expect(both.map((f) => f.id)).toEqual(['1']);
   });
 });
