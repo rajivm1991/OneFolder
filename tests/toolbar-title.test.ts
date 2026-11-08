@@ -5,6 +5,7 @@ import SysPath from 'path';
 import {
   ClientDateSearchCriteria,
   ClientStringSearchCriteria,
+  ClientTagSearchCriteria,
 } from '../src/frontend/entities/SearchCriteria';
 import {
   locationFilterCriteria,
@@ -38,6 +39,11 @@ describe('summarizeFilters', () => {
   it('does not treat a tag typed in the search bar as a sidebar filter', () => {
     const typed = new ClientStringSearchCriteria('absolutePath', 'x');
     expect(summarizeFilters([typed], tagName)).toEqual({ names: [], otherCount: 1 });
+  });
+
+  it('counts a tag chip from the search bar as another term, not a sidebar filter', () => {
+    const chip = new ClientTagSearchCriteria('tags', 't1');
+    expect(summarizeFilters([chip], tagName)).toEqual({ names: [], otherCount: 1 });
   });
 
   it('shows a tag that no longer exists as Tag', () => {

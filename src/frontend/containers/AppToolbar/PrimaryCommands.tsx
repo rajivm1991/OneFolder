@@ -43,9 +43,12 @@ const ToolbarTitle = observer(() => {
   const title = toolbarTitle(view, fileStore.showsMissingContent, summary);
 
   return (
-    <div className="toolbar-title">
-      <h1 title={title}>{title}</h1>
-      <span>{itemCountLabel(fileStore.fileList.length)}</span>
+    <div className="toolbar-title" role="status">
+      <span className="toolbar-title__name" title={title}>
+        {title}
+      </span>
+      {/* fileList counts files: it is not the number of persons, duplicate groups or located files */}
+      {view === 'files' && <span>{itemCountLabel(fileStore.fileList.length)}</span>}
     </div>
   );
 });
@@ -85,25 +88,24 @@ const PrimaryCommands = observer(() => {
 
   return (
     <>
-      <OutlinerToggle />
+      <div className="toolbar-side toolbar-side--start">
+        <OutlinerToggle />
 
-      <ToolbarTitle />
-
-      <div className="spacer" />
+        <ToolbarTitle />
+      </div>
 
       {/* Tag, Delete and the selection count are in the selection bar of the content view */}
       <Searchbar />
 
-      <div className="spacer" />
+      <div className="toolbar-side toolbar-side--end">
+        <DateFilter />
 
-      <DateFilter />
+        {uiStore.isMasonry && <ViewCommand />}
 
-      {/* <ViewCommand /> */}
-      {uiStore.isMasonry && <ViewCommand />}
+        <SortCommand />
 
-      <SortCommand />
-
-      <InspectorToggle />
+        <InspectorToggle />
+      </div>
     </>
   );
 });
