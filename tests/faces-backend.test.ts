@@ -56,6 +56,7 @@ describe('Backend face detection API', () => {
       annotations: '',
       lat: undefined,
       lng: undefined,
+      dateTaken: null,
     };
   }
 

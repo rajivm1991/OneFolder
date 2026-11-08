@@ -58,6 +58,7 @@ describe('migrateDexieToSqlite', () => {
         annotations: '',
         lat: undefined,
         lng: undefined,
+        dateTaken: null,
         tags: ['tag1'],
       },
     ]);

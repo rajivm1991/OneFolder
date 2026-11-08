@@ -139,6 +139,7 @@ describe('SqliteBackend', () => {
       annotations: '',
       lat: undefined,
       lng: undefined,
+      dateTaken: null,
       tags: [],
       ...overrides,
     };
@@ -297,6 +298,56 @@ describe('SqliteBackend', () => {
     ]);
     const [saved] = await backend.fetchFilesByID(['new']);
     expect(saved.lat).toBeNull();
+    // Legacy rows have no capture date resolved yet, so the backfill picks them up.
+    expect(byId.get('legacyNull')!.dateTaken).toBeNull();
+  });
+
+  it('persists dateTaken, including the unresolved (null) state', async () => {
+    const backend = await initBackend();
+    const taken = new Date('2019-07-04T10:20:30.000Z');
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'resolved', absolutePath: '/drives/school/r.jpg', dateTaken: taken }),
+      createMockFile({ id: 'unresolved', absolutePath: '/drives/school/u.jpg', dateTaken: null }),
+    ]);
+    const byId = new Map(
+      (await backend.fetchFiles('id', OrderDirection.Asc)).map((f) => [f.id, f] as const),
+    );
+    expect(byId.get('resolved')!.dateTaken).toEqual(taken);
+    expect(byId.get('unresolved')!.dateTaken).toBeNull();
+
+    const later = new Date('2021-01-01T00:00:00.000Z');
+    await backend.saveFiles([{ ...byId.get('unresolved')!, dateTaken: later }]);
+    const [saved] = await backend.fetchFilesByID(['unresolved']);
+    expect(saved.dateTaken).toEqual(later);
+  });
+
+  it('sorts by dateTaken, treating unresolved files as their dateCreated', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({
+        id: 'old-photo-new-copy',
+        absolutePath: '/drives/school/a.jpg',
+        dateCreated: new Date('2024-01-01'), // backed up recently
+        dateTaken: new Date('2015-05-05'), // but shot long ago
+      }),
+      createMockFile({
+        id: 'recent-photo',
+        absolutePath: '/drives/school/b.jpg',
+        dateCreated: new Date('2024-01-02'),
+        dateTaken: new Date('2023-03-03'),
+      }),
+      createMockFile({
+        id: 'unresolved',
+        absolutePath: '/drives/school/c.jpg',
+        dateCreated: new Date('2019-09-09'),
+        dateTaken: null,
+      }),
+    ]);
+
+    const asc = await backend.fetchFiles('dateTaken', OrderDirection.Asc);
+    expect(asc.map((f) => f.id)).toEqual(['old-photo-new-copy', 'unresolved', 'recent-photo']);
+    const desc = await backend.fetchFiles('dateTaken', OrderDirection.Desc);
+    expect(desc.map((f) => f.id)).toEqual(['recent-photo', 'unresolved', 'old-photo-new-copy']);
   });
 
   it('createFilesFromPath escapes LIKE metacharacters in the path when detecting duplicates', async () => {

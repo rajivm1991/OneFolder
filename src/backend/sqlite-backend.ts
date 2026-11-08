@@ -312,6 +312,7 @@ export class SqliteBackend implements DataStorage {
       dateCreated: new Date(row.dateCreated),
       dateLastIndexed: new Date(row.dateLastIndexed),
       annotations: row.annotations,
+      dateTaken: row.dateTaken ? new Date(row.dateTaken) : null,
       lat: gpsFromRow(row.lat, row.latChecked),
       lng: gpsFromRow(row.lng, row.lngChecked),
       tags: tagRows.map((r) => r.tag_id),
@@ -329,8 +330,9 @@ export class SqliteBackend implements DataStorage {
       return shuffleArray(files);
     }
     const sorted = [...files].sort((a, b) => {
-      const av = (a as any)[order];
-      const bv = (b as any)[order];
+      // Until the dateTaken backfill reaches a file, sort it by when it was created on disk
+      const av = order === 'dateTaken' ? (a.dateTaken ?? a.dateCreated) : (a as any)[order];
+      const bv = order === 'dateTaken' ? (b.dateTaken ?? b.dateCreated) : (b as any)[order];
       if (av < bv) return -1;
       if (av > bv) return 1;
       return 0;
@@ -384,17 +386,18 @@ export class SqliteBackend implements DataStorage {
       const upsert = this.#db.prepare(`
         INSERT INTO files (id, ino, locationId, relativePath, absolutePath, name, extension, size, width, height,
                             dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng,
-                            latChecked, lngChecked)
+                            latChecked, lngChecked, dateTaken)
         VALUES (@id, @ino, @locationId, @relativePath, @absolutePath, @name, @extension, @size, @width, @height,
                 @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng,
-                @latChecked, @lngChecked)
+                @latChecked, @lngChecked, @dateTaken)
         ON CONFLICT(id) DO UPDATE SET
           ino=excluded.ino, locationId=excluded.locationId, relativePath=excluded.relativePath,
           absolutePath=excluded.absolutePath, name=excluded.name, extension=excluded.extension,
           size=excluded.size, width=excluded.width, height=excluded.height, dateAdded=excluded.dateAdded,
           dateModified=excluded.dateModified, dateCreated=excluded.dateCreated,
           dateLastIndexed=excluded.dateLastIndexed, annotations=excluded.annotations,
-          lat=excluded.lat, lng=excluded.lng, latChecked=excluded.latChecked, lngChecked=excluded.lngChecked
+          lat=excluded.lat, lng=excluded.lng, latChecked=excluded.latChecked, lngChecked=excluded.lngChecked,
+          dateTaken=excluded.dateTaken
       `);
       for (const file of items) {
         upsert.run({
@@ -403,6 +406,7 @@ export class SqliteBackend implements DataStorage {
           dateModified: file.dateModified.toISOString(),
           dateCreated: file.dateCreated.toISOString(),
           dateLastIndexed: file.dateLastIndexed.toISOString(),
+          dateTaken: file.dateTaken?.toISOString() ?? null,
           ...gpsParams(file),
         });
         this.#writeFileTags(file.id, file.tags);
@@ -426,10 +430,10 @@ export class SqliteBackend implements DataStorage {
       const insert = this.#db.prepare(`
         INSERT INTO files (id, ino, locationId, relativePath, absolutePath, name, extension, size, width, height,
                             dateAdded, dateModified, dateCreated, dateLastIndexed, annotations, lat, lng,
-                            latChecked, lngChecked)
+                            latChecked, lngChecked, dateTaken)
         VALUES (@id, @ino, @locationId, @relativePath, @absolutePath, @name, @extension, @size, @width, @height,
                 @dateAdded, @dateModified, @dateCreated, @dateLastIndexed, @annotations, @lat, @lng,
-                @latChecked, @lngChecked)
+                @latChecked, @lngChecked, @dateTaken)
       `);
       for (const file of toInsert) {
         insert.run({
@@ -438,6 +442,7 @@ export class SqliteBackend implements DataStorage {
           dateModified: file.dateModified.toISOString(),
           dateCreated: file.dateCreated.toISOString(),
           dateLastIndexed: file.dateLastIndexed.toISOString(),
+          dateTaken: file.dateTaken?.toISOString() ?? null,
           ...gpsParams(file),
         });
         this.#writeFileTags(file.id, file.tags);

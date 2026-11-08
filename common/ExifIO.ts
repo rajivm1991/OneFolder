@@ -49,6 +49,7 @@ import exiftool from '@logion/node-exiftool';
 import { IS_WIN } from './process';
 import { getExtraResourcePath } from './fs';
 import { parseGpsCoordinates } from './gps';
+import { firstExifDate, hasUtcDates } from './exifDate';
 
 // The exif binary is placed using ElectronBuilder's extraResources:
 const exiftoolRunnable = IS_WIN ? 'exiftool.exe' : 'exiftool.pl';
@@ -461,6 +462,8 @@ class ExifIO {
     dimensions: { width: number; height: number };
     tags: string[][];
     gps: { lat: number; lng: number } | null;
+    /** EXIF capture date; null when the file has none. */
+    dateTaken: Date | null;
   }> {
     let metadata: Awaited<ReturnType<typeof ep.readMetadata>> | undefined = undefined;
     try {
@@ -469,7 +472,7 @@ class ExifIO {
       const dimensionFields = isVideo
         ? ['s3', 'ImageWidth', 'ImageHeight', 'VideoWidth', 'VideoHeight', 'SourceImageWidth', 'SourceImageHeight', 'Rotation']
         : ['s3', 'ImageWidth', 'ImageHeight', 'Orientation'];
-        
+
       metadata = await ep.readMetadata(filepath, [
         ...dimensionFields,
         'HierarchicalSubject',
@@ -477,6 +480,8 @@ class ExifIO {
         'Keywords',
         'GPSLatitude',
         'GPSLongitude',
+        'DateTimeOriginal',
+        'CreateDate',
         ...this.extraArgs,
       ]);
 
@@ -521,7 +526,12 @@ class ExifIO {
         entry.GPSLongitude?.toString(),
       );
 
-      return { dimensions, tags, gps };
+      const dateTaken = firstExifDate(
+        [entry.DateTimeOriginal?.toString(), entry.CreateDate?.toString()],
+        hasUtcDates(filepath),
+      );
+
+      return { dimensions, tags, gps, dateTaken };
     } catch (e) {
       console.error('Could not read image dimensions and tags from', filepath, e, metadata);
       // Return safe defaults on error
@@ -529,6 +539,7 @@ class ExifIO {
         dimensions: { width: 0, height: 0 },
         tags: [],
         gps: null,
+        dateTaken: null,
       };
     }
   }

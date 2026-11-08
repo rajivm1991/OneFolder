@@ -310,6 +310,8 @@ class LocationStore {
             ...dbFile,
             // Recreate metadata which checks the resolution of the image
             ...(await getMetaData(diskFile, this.rootStore.imageLoader)),
+            // The content changed, so the old capture date may be wrong: let the backfill re-resolve it
+            dateTaken: null,
             dateLastIndexed: new Date(),
           };
 
@@ -687,6 +689,7 @@ export async function pathToIFile(
     annotations: '{}',
     lat: undefined,
     lng: undefined,
+    dateTaken: null, // resolved by the date taken backfill
     ...(await getMetaData(stats, imageLoader)),
   };
 }
@@ -758,6 +761,7 @@ export async function pathToIFileWithMetadata(
     dateCreated: extendedMetadata.dateCreated,
     lat: extendedMetadata.lat,
     lng: extendedMetadata.lng,
+    dateTaken: extendedMetadata.dateTaken,
   };
 }
 
