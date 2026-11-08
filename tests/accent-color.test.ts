@@ -1,4 +1,9 @@
-import { accentColorToCss, accentTextColor, relativeLuminance } from '../common/accent-color';
+import {
+  accentColorToCss,
+  accentTextColor,
+  lightenColor,
+  relativeLuminance,
+} from '../common/accent-color';
 
 describe('relativeLuminance', () => {
   it('is 0 for black and 1 for white', () => {
@@ -28,6 +33,26 @@ describe('accentTextColor', () => {
 
   it('falls back to white for anything that is not a colour', () => {
     expect(accentTextColor('blue')).toBe('#ffffff');
+  });
+});
+
+describe('lightenColor', () => {
+  it('mixes towards white', () => {
+    expect(lightenColor('#000000', 0)).toBe('#000000');
+    expect(lightenColor('#000000', 1)).toBe('#ffffff');
+    expect(lightenColor('#000000', 0.5)).toBe('#808080');
+  });
+
+  it('expands short hex and clamps the amount', () => {
+    expect(lightenColor('#888', 0)).toBe('#888888');
+    expect(lightenColor('#0a84ff', 2)).toBe('#ffffff');
+    expect(lightenColor('#0a84ff', -1)).toBe('#0a84ff');
+  });
+
+  it('rejects anything that is not a hex colour', () => {
+    expect(lightenColor('blue', 0.5)).toBeUndefined();
+    expect(lightenColor('rgb(1, 2, 3)', 0.5)).toBeUndefined();
+    expect(lightenColor('', 0.5)).toBeUndefined();
   });
 });
 
