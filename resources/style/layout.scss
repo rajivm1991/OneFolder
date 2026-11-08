@@ -128,12 +128,18 @@ body {
     }
   }
 
-  #outliner-content {
-    top: var(--toolbar-height);
+  // The header strip drags the window like the rest of the strip above it, except for its button
+  #outliner-header {
+    border-bottom: 0;
+    -webkit-app-region: drag;
 
-    header {
-      background: transparent;
+    button {
+      -webkit-app-region: no-drag;
     }
+  }
+
+  #outliner-content header {
+    background: transparent;
   }
 
   // Sidebar collapsed: the traffic lights now sit over the toolbar, so leave room for them. Kept in full

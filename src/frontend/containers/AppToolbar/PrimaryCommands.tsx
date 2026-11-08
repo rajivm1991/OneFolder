@@ -5,27 +5,12 @@ import { IconSet } from 'widgets';
 import { ToolbarButton } from 'widgets/toolbar';
 import FileTagEditor from '../../containers/AppToolbar/FileTagEditor';
 import { useStore } from '../../contexts/StoreContext';
+import OutlinerToggle from '../Outliner/OutlinerToggle';
 import DateFilter from './DateFilter';
 import { SortCommand } from './Menus';
 import { ViewCommand } from './Menus';
 import Searchbar from './Searchbar';
 import { itemCountLabel, summarizeFilters, ToolbarView, toolbarTitle } from './toolbar-title';
-
-const OutlinerToggle = observer(() => {
-  const { uiStore } = useStore();
-
-  return (
-    <ToolbarButton
-      id="outliner-toggle"
-      text="Toggle Outliner"
-      icon={uiStore.isOutlinerOpen ? IconSet.DOUBLE_CARET : IconSet.MENU_HAMBURGER}
-      controls="outliner"
-      pressed={uiStore.isOutlinerOpen}
-      onClick={uiStore.toggleOutliner}
-      tabIndex={0}
-    />
-  );
-});
 
 /** What is shown, and how many items there are */
 const ToolbarTitle = observer(() => {
@@ -89,7 +74,8 @@ const PrimaryCommands = observer(() => {
   return (
     <>
       <div className="toolbar-side toolbar-side--start">
-        <OutlinerToggle />
+        {/* While the sidebar is open its toggle is in the sidebar header */}
+        {!uiStore.isOutlinerOpen && <OutlinerToggle />}
 
         <ToolbarTitle />
       </div>

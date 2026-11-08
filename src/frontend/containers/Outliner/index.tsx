@@ -2,6 +2,8 @@ import { observer } from 'mobx-react-lite';
 import React from 'react';
 import useLocalStorage from 'src/frontend/hooks/useLocalStorage';
 import MultiSplit from 'widgets/MultiSplit';
+import { Toolbar } from 'widgets/toolbar';
+import OutlinerToggle from './OutlinerToggle';
 import { useStore } from '../../contexts/StoreContext';
 import LocationsPanel from './LocationsPanel';
 import SavedSearchesPanel from './SavedSearchesPanel';
@@ -20,6 +22,12 @@ const Outliner = () => {
 
   return (
     <nav id="outliner" aria-expanded={uiStore.isOutlinerOpen}>
+      {/* Same height as the toolbar; on macOS the traffic lights sit at its left */}
+      {uiStore.isOutlinerOpen && (
+        <Toolbar id="outliner-header" label="Sidebar header" controls="content-view" isCompact>
+          <OutlinerToggle />
+        </Toolbar>
+      )}
       <div id="outliner-content">
         <MultiSplit
           onUpdateExpansion={setExpansion}
