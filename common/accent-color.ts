@@ -25,8 +25,9 @@ export function relativeLuminance(color: string): number | undefined {
 
 const LIGHT_TEXT = '#ffffff';
 const DARK_TEXT = '#1d1d1f';
-// Above this luminance, white text has less than about 2.6:1 contrast. White stays on the macOS blue, purple, pink and
-// graphite (luminance 0.24 to 0.28), which is the native look. Dark text goes on orange, yellow and green (0.43 and up).
+// A design choice, not a WCAG pass: white stays on the native macOS blue, purple, pink, red and graphite (luminance 0.24 to 0.28)
+// to match the system look, even though white on those is only about 3.3:1 to 3.7:1 (below 4.5:1 for normal text). Above
+// this luminance white falls below about 2.6:1 and becomes unreadable. Dark text goes on orange, yellow and green (0.43 and up).
 const DARK_TEXT_LUMINANCE_THRESHOLD = 0.35;
 
 /**

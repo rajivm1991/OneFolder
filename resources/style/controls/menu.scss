@@ -48,7 +48,7 @@ a[role='menuitem'] {
 }
 
 [role='menuitemradio'][aria-checked='true'] {
-  color: var(--text-color-strong);
+  color: var(--accent-color-text);
   background: var(--accent-color);
 }
 

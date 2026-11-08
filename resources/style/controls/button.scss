@@ -49,8 +49,8 @@ button {
 
 .btn-filled {
   background: var(--accent-color) !important;
-  --text-color: #e2e2e2;
-  --text-color-strong: white;
+  --text-color: var(--accent-color-text);
+  --text-color-strong: var(--accent-color-text);
   --text-color-muted: var(--text-color);
 }
 

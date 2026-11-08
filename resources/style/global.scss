@@ -28,6 +28,7 @@ select:focus-visible {
 // Menus and their items have their own focus style.
 #gallery-content:focus-visible,
 #zoomable-image:focus-visible,
+.date-filter:focus-visible,
 [role='treeitem']:focus-visible,
 [role='menu']:focus-visible,
 [role^='menuitem']:focus-visible,

@@ -139,11 +139,7 @@
   font-size: var(--font-size-body);
   color: var(--ui-text);
 
-  // Takes focus when the popover opens, so that it can be dismissed; not a control, so no ring
-  &:focus {
-    outline: none;
-  }
-
+  // Takes focus when the popover opens, so that it can be dismissed; not a control, so no ring (see global.scss)
   // :where() keeps these defaults weaker than the rules of each kind of button below
   :where(button) {
     font: inherit;
@@ -286,13 +282,13 @@
       box-shadow: inset 0 0 0 0.5px var(--ui-line);
     }
 
-    // The chosen month: solid accent with white text, as in the mockup
+    // The chosen month: solid accent with its readable text colour, as in the mockup
     &[aria-pressed='true'] {
       background: var(--accent-color);
-      color: #fff;
+      color: var(--accent-color-text);
 
       .date-filter__count {
-        color: rgba(255, 255, 255, 0.85);
+        color: color-mix(in srgb, var(--accent-color-text) 85%, transparent);
       }
     }
   }

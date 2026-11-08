@@ -222,7 +222,7 @@
 
     &[aria-selected='true'] {
       background-color: var(--accent-color);
-      color: white;
+      color: var(--accent-color-text);
     }
 
     &[data-dnd-target='true'] {
