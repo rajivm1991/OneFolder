@@ -14,17 +14,16 @@ import { ClientFileSearchCriteria, ClientTagSearchCriteria } from '../entities/S
 import { ClientTag } from '../entities/Tag';
 import { comboMatches, getKeyCombo, parseKeyCombo } from '../hotkeyParser';
 import RootStore from './RootStore';
+import { migrateViewMethod, VIEW_METHOD_VERSION } from './view-method-migration';
 
 import posthog from 'posthog-js';
 
-export type CalendarLayout = 'list' | 'grid';
-
+// Stored as a number: see view-method-migration.ts when removing or reordering entries
 export const enum ViewMethod {
   List,
   Grid,
   MasonryVertical,
   MasonryHorizontal,
-  Calendar,
   Map,
   Faces,
   Duplicates,
@@ -57,15 +56,10 @@ export interface IHotkeyMap {
   viewGrid: string;
   viewMasonryVertical: string;
   viewMasonryHorizontal: string;
-  viewCalendar: string;
   viewFaces: string;
   viewMap: string;
   viewDuplicates: string;
   viewSlide: string;
-  /** Calendar view: scroll to the newer month (the one above) */
-  calendarNewerMonth: string;
-  /** Calendar view: scroll to the older month (the one below) */
-  calendarOlderMonth: string;
   search: string;
   advancedSearch: string;
 
@@ -91,12 +85,9 @@ export const defaultHotkeyMap: IHotkeyMap = {
   viewGrid: 'alt + 2',
   viewMasonryVertical: 'alt + 3',
   viewMasonryHorizontal: 'alt + 4',
-  viewCalendar: 'alt + 5',
   viewFaces: 'alt + 6',
   viewMap: 'alt + 7',
   viewDuplicates: 'alt + 8',
-  calendarNewerMonth: 'shift + up',
-  calendarOlderMonth: 'shift + down',
   search: 'mod + f',
   advancedSearch: 'mod + shift + f',
   // openPreviewWindow: 'space',
@@ -130,7 +121,7 @@ type PersistentPreferenceFields =
   | 'importDirectory'
   | 'method'
   | 'lastMasonryMethod'
-  | 'calendarLayout'
+  | 'viewMethodVersion'
   | 'thumbnailSize'
   | 'thumbnailShape'
   | 'upscaleMode'
@@ -181,7 +172,6 @@ class UiStore {
   @observable searchMatchAny = false;
   @observable method: ViewMethod = ViewMethod.MasonryHorizontal;
   @observable lastMasonryMethod: ViewMethod = ViewMethod.MasonryHorizontal;
-  @observable calendarLayout: CalendarLayout = 'list';
   @observable isSlideMode: boolean = false;
   @observable isFullScreen: boolean = false;
   @observable outlinerWidth: number = UiStore.MIN_OUTLINER_WIDTH;
@@ -274,10 +264,6 @@ class UiStore {
     return this.method === ViewMethod.MasonryHorizontal;
   }
 
-  @computed get isCalendar(): boolean {
-    return this.method === ViewMethod.Calendar;
-  }
-
   @computed get isFaces(): boolean {
     return this.method === ViewMethod.Faces;
   }
@@ -363,19 +349,6 @@ class UiStore {
   @action.bound setMethodMasonryHorizontal(): void {
     this.lastMasonryMethod = ViewMethod.MasonryHorizontal;
     this.method = ViewMethod.MasonryHorizontal;
-  }
-
-  @action.bound setMethodCalendar(): void {
-    this.rootStore.fileStore.orderFilesBy('dateCreated');
-    this.method = ViewMethod.Calendar;
-  }
-
-  @action.bound setCalendarLayoutList(): void {
-    this.calendarLayout = 'list';
-  }
-
-  @action.bound setCalendarLayoutGrid(): void {
-    this.calendarLayout = 'grid';
   }
 
   @action.bound setMethodFaces(): void {
@@ -962,8 +935,6 @@ class UiStore {
       this.setMethodMasonryVertical();
     } else if (matches(hotkeyMap.viewMasonryHorizontal)) {
       this.setMethodMasonryHorizontal();
-    } else if (matches(hotkeyMap.viewCalendar)) {
-      this.setMethodCalendar();
     } else if (matches(hotkeyMap.viewFaces)) {
       this.setMethodFaces();
     } else if (matches(hotkeyMap.viewMap)) {
@@ -1027,8 +998,7 @@ class UiStore {
         if (prefs.importDirectory) {
           this.setImportDirectory(prefs.importDirectory);
         }
-        this.setMethod(Number(prefs.method));
-        this.calendarLayout = prefs.calendarLayout === 'grid' ? 'grid' : 'list';
+        this.setMethod(migrateViewMethod(Number(prefs.method), prefs.viewMethodVersion));
         if (prefs.thumbnailSize) {
           this.setThumbnailSize(prefs.thumbnailSize);
         }
@@ -1109,7 +1079,7 @@ class UiStore {
       importDirectory: this.importDirectory,
       method: this.method,
       lastMasonryMethod: this.lastMasonryMethod,
-      calendarLayout: this.calendarLayout,
+      viewMethodVersion: VIEW_METHOD_VERSION,
       thumbnailSize: this.thumbnailSize,
       thumbnailShape: this.thumbnailShape,
       upscaleMode: this.upscaleMode,
