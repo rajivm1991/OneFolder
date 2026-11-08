@@ -44,6 +44,16 @@ const FileTagEditor = observer(() => {
 
 export default FileTagEditor;
 
+/**
+ * The tag editor panel on its own, for a button that is placed elsewhere.
+ * It must come right after that button: the panel does not treat focus moving to the previous sibling as leaving it.
+ */
+export const TagEditorPopover = () => (
+  <FloatingPanel>
+    <TagEditor />
+  </FloatingPanel>
+);
+
 const TagEditor = () => {
   const { uiStore } = useStore();
   const [inputText, setInputText] = useState('');

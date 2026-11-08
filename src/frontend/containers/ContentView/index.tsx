@@ -8,6 +8,7 @@ import { MenuSubItem, Menu, useContextMenu } from 'widgets/menus';
 
 import Placeholder from './Placeholder';
 import Layout from './LayoutSwitcher';
+import SelectionBar from './SelectionBar';
 
 import { LayoutMenuItems, SortMenuItems } from '../AppToolbar/Menus';
 import { useTagDnD } from 'src/frontend/contexts/TagDnDContext';
@@ -29,6 +30,7 @@ const ContentView = observer(() => {
       className={`thumbnail-${uiStore.thumbnailSize} thumbnail-${uiStore.thumbnailShape}`}
     >
       {fileList.length === 0 ? <Placeholder /> : <Content />}
+      <SelectionBar />
     </div>
   );
 });
