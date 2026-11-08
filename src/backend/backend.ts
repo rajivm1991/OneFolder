@@ -760,7 +760,7 @@ function filterDateWhere<T>(
   }
 }
 
-function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
+export function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
   const key = crit.key as string;
   // The date taken, or until the dateTaken backfill reaches a file, when it was created on disk
   const read = key === 'dateTaken' ? (t: any) => t.dateTaken ?? t.dateCreated : (t: any) => t[key];
@@ -771,7 +771,7 @@ function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
 
   switch (crit.operator) {
     case 'equals':
-      return (t: any) => read(t) >= start || read(t) <= end;
+      return (t: any) => read(t) >= start && read(t) <= end;
     case 'notEqual':
       return (t: any) => read(t) < start || read(t) > end;
     case 'smallerThan':
