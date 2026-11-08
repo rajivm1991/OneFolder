@@ -10,6 +10,9 @@ import { PersonDTO } from './person';
 import { TagDTO } from './tag';
 import { VisualHashDTO } from './visual-hash';
 
+/** How many files were created in one month. `month` is 0-11, like `Date.getMonth()`. */
+export type MonthCount = { year: number; month: number; count: number };
+
 /**
  * The user generated persisted data edited or viewed by one or multiple actors (users, multiple devices etc.).
  *
@@ -46,6 +49,8 @@ export interface DataStorage {
   removeLocation(location: ID): Promise<void>;
   removeSearch(search: ID): Promise<void>;
   countFiles(): Promise<[fileCount: number, untaggedFileCount: number]>;
+  /** Number of files per month of their creation date, in local time. Months without files are left out. `month` is 0-11. */
+  countFilesByMonth(): Promise<MonthCount[]>;
   clear(): Promise<void>;
   clearFilesOnly(): Promise<void>;
 

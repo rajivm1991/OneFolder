@@ -4,7 +4,7 @@ import { action, computed, makeObservable, observable, runInAction, transaction 
 import { getThumbnailPath } from 'common/fs';
 import { promiseAllLimit } from 'common/promise';
 import { debounce } from 'common/timeout';
-import { DataStorage } from '../../api/data-storage';
+import { DataStorage, MonthCount } from '../../api/data-storage';
 import { ConditionDTO, OrderBy, OrderDirection } from '../../api/data-storage-search';
 import { FileDTO, IMG_EXTENSIONS_TYPE } from '../../api/file';
 import { ID } from '../../api/id';
@@ -1114,6 +1114,11 @@ class FileStore {
       this.numUntaggedFiles = numUntaggedFiles;
       this.numTotalFiles = numTotalFiles;
     });
+  }
+
+  /** Number of files per month of their creation date, for the date filter. Counts the whole library. */
+  fetchMonthCounts(): Promise<MonthCount[]> {
+    return this.backend.countFilesByMonth();
   }
 
   @action private setOrderDirection(order: OrderDirection) {
