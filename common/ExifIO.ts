@@ -49,7 +49,7 @@ import exiftool from '@logion/node-exiftool';
 import { IS_WIN } from './process';
 import { getExtraResourcePath } from './fs';
 import { parseGpsCoordinates } from './gps';
-import { firstExifDate } from './exifDate';
+import { firstExifDate, hasUtcDates } from './exifDate';
 
 // The exif binary is placed using ElectronBuilder's extraResources:
 const exiftoolRunnable = IS_WIN ? 'exiftool.exe' : 'exiftool.pl';
@@ -527,8 +527,8 @@ class ExifIO {
       );
 
       const dateTaken = firstExifDate(
-        entry.DateTimeOriginal?.toString(),
-        entry.CreateDate?.toString(),
+        [entry.DateTimeOriginal?.toString(), entry.CreateDate?.toString()],
+        hasUtcDates(filepath),
       );
 
       return { dimensions, tags, gps, dateTaken };

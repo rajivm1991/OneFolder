@@ -310,6 +310,8 @@ class LocationStore {
             ...dbFile,
             // Recreate metadata which checks the resolution of the image
             ...(await getMetaData(diskFile, this.rootStore.imageLoader)),
+            // The content changed, so the old capture date may be wrong: let the backfill re-resolve it
+            dateTaken: null,
             dateLastIndexed: new Date(),
           };
 

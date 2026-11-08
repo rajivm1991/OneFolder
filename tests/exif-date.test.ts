@@ -1,4 +1,4 @@
-import { firstExifDate, parseExifDate } from '../common/exifDate';
+import { firstExifDate, hasUtcDates, parseExifDate } from '../common/exifDate';
 
 describe('parseExifDate', () => {
   it('parses a timezone-less value as local time', () => {
@@ -25,14 +25,47 @@ describe('parseExifDate', () => {
   });
 });
 
+describe('parseExifDate with assumeUtc', () => {
+  it('reads a timezone-less value as UTC instead of local time', () => {
+    expect(parseExifDate('2023:05:01 12:34:56', true)).toEqual(new Date('2023-05-01T12:34:56Z'));
+  });
+
+  it('still honours an explicit offset', () => {
+    expect(parseExifDate('2023:05:01 12:34:56+05:30', true)).toEqual(
+      new Date('2023-05-01T07:04:56Z'),
+    );
+  });
+});
+
+describe('hasUtcDates', () => {
+  it('is true for the video extensions, case-insensitively', () => {
+    expect(hasUtcDates('/a/clip.mp4')).toBe(true);
+    expect(hasUtcDates('/a/clip.MP4')).toBe(true);
+    expect(hasUtcDates('/a/clip.webm')).toBe(true);
+    expect(hasUtcDates('/a/clip.ogg')).toBe(true);
+  });
+
+  it('is false for photos', () => {
+    expect(hasUtcDates('/a/photo.jpg')).toBe(false);
+    expect(hasUtcDates('/a/photo.heic')).toBe(false);
+    expect(hasUtcDates('/a/mp4/photo.jpg')).toBe(false);
+  });
+});
+
 describe('firstExifDate', () => {
   it('uses the first parsable value', () => {
-    expect(firstExifDate(undefined, '0000:00:00 00:00:00', '2020:01:02 03:04:05')).toEqual(
+    expect(firstExifDate([undefined, '0000:00:00 00:00:00', '2020:01:02 03:04:05'])).toEqual(
       new Date(2020, 0, 2, 3, 4, 5),
     );
   });
 
   it('returns null when nothing parses', () => {
-    expect(firstExifDate(undefined, 'nope')).toBeNull();
+    expect(firstExifDate([undefined, 'nope'])).toBeNull();
+  });
+
+  it('passes assumeUtc through', () => {
+    expect(firstExifDate([undefined, '2020:01:02 03:04:05'], true)).toEqual(
+      new Date('2020-01-02T03:04:05Z'),
+    );
   });
 });

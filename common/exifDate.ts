@@ -2,11 +2,21 @@
 const EXIF_DATE = /^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.\d+)?\s*(Z|[+-]\d{2}:?\d{2})?$/;
 
 /**
+ * QuickTime/MP4 dates (e.g. CreateDate) are stored in UTC, but ExifTool prints them without a zone
+ * marker by default. Cameras write photo EXIF dates in local time, so only videos need this.
+ * Keep in sync with ExifIO.isVideoFile.
+ */
+export function hasUtcDates(filepath: string): boolean {
+  return /\.(mp4|webm|ogg)$/i.test(filepath);
+}
+
+/**
  * Parses an ExifTool date string (e.g. DateTimeOriginal, CreateDate) into a Date.
- * Values without a timezone are interpreted as local time, matching how cameras write them.
+ * Values without a timezone are interpreted as local time, matching how cameras write them,
+ * unless `assumeUtc` is set (see hasUtcDates).
  * Returns null for missing, blank, zeroed ("0000:00:00 00:00:00") or unparsable values.
  */
-export function parseExifDate(raw: string | undefined | null): Date | null {
+export function parseExifDate(raw: string | undefined | null, assumeUtc = false): Date | null {
   if (!raw) {
     return null;
   }
@@ -21,9 +31,9 @@ export function parseExifDate(raw: string | undefined | null): Date | null {
   }
 
   let date: Date;
-  if (zone === undefined) {
+  if (zone === undefined && !assumeUtc) {
     date = new Date(y, mo - 1, d, h, mi, s);
-  } else if (zone === 'Z') {
+  } else if (zone === undefined || zone === 'Z') {
     date = new Date(Date.UTC(y, mo - 1, d, h, mi, s));
   } else {
     const sign = zone[0] === '-' ? -1 : 1;
@@ -35,9 +45,12 @@ export function parseExifDate(raw: string | undefined | null): Date | null {
 }
 
 /** Picks the first parsable date out of several EXIF values (in priority order). */
-export function firstExifDate(...raws: (string | undefined | null)[]): Date | null {
+export function firstExifDate(
+  raws: (string | undefined | null)[],
+  assumeUtc = false,
+): Date | null {
   for (const raw of raws) {
-    const parsed = parseExifDate(raw);
+    const parsed = parseExifDate(raw, assumeUtc);
     if (parsed) {
       return parsed;
     }

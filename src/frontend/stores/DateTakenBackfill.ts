@@ -1,6 +1,6 @@
 import fse from 'fs-extra';
 import { promiseAllLimit } from '../../../common/promise';
-import { firstExifDate } from '../../../common/exifDate';
+import { firstExifDate, hasUtcDates } from '../../../common/exifDate';
 import type ExifIO from '../../../common/ExifIO';
 import { ClientFile } from '../entities/File';
 
@@ -32,7 +32,7 @@ export async function runDateTakenBackfill(
         'DateTimeOriginal',
         'CreateDate',
       ]);
-      exifDate = firstExifDate(original, created);
+      exifDate = firstExifDate([original, created], hasUtcDates(file.absolutePath));
     } catch (e) {
       console.warn('Date taken backfill: could not read EXIF dates for', file.absolutePath, e);
     }

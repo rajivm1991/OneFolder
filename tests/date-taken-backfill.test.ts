@@ -28,6 +28,18 @@ describe('runDateTakenBackfill', () => {
     expect(resolved.setDateTaken).not.toHaveBeenCalled();
   });
 
+  it('reads a timezone-less video date as UTC but a photo date as local time', async () => {
+    const readExifTags = jest.fn(async () => [undefined, '2022:03:04 05:06:07']);
+    const exifTool = { readExifTags } as unknown as ExifIO;
+    const video = makeFile('/clip.mp4', null);
+    const photo = makeFile('/photo.jpg', null);
+
+    await runDateTakenBackfill([video, photo] as never, exifTool, async () => mtime);
+
+    expect(video.setDateTaken).toHaveBeenCalledWith(new Date('2022-03-04T05:06:07Z'));
+    expect(photo.setDateTaken).toHaveBeenCalledWith(new Date(2022, 2, 4, 5, 6, 7));
+  });
+
   it('falls back to the disk date when ExifTool throws', async () => {
     const exifTool = {
       readExifTags: jest.fn(async () => {
