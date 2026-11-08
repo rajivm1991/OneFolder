@@ -1,15 +1,87 @@
+// The toolbar follows the approved mockup: title and count on the left, search in the middle, the other controls as
+// 28px icon buttons on the right. The colours are the mockup tokens that the date filter defines (--df-*, below) until
+// the app-wide theme chunk replaces the theme variables.
 #toolbar {
   justify-content: stretch;
+  gap: 4px;
 
   .toolbar-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 28px;
+    min-height: 28px;
+    padding: 0 6px;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--df-sec);
+
+    // Icon-only buttons are square
+    &[data-collapsible='true'] {
+      padding: 0;
+    }
+
+    &:hover {
+      background: var(--df-hover);
+      color: var(--df-text);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--df-accent);
+      outline-offset: 1px;
+    }
+
+    // Pressed is shown by a tint as well as by the stronger colour, not by colour alone
     &[aria-pressed='true'],
     &[aria-checked='true'] {
-      color: var(--text-color-strong);
+      background: var(--df-accent-soft);
+      box-shadow: inset 0 0 0 1px var(--df-accent);
+      color: var(--df-text);
     }
   }
 
   .spacer {
     flex-grow: 1;
+  }
+
+  // Equal-width sides keep the search in the middle of the window whatever the title says
+  .toolbar-side {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1 1 0;
+    min-width: 0;
+
+    &--end {
+      justify-content: flex-end;
+    }
+  }
+}
+
+// What is shown, and how many items
+.toolbar-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  max-width: 30%;
+  margin-left: 8px;
+  color: var(--df-text);
+
+  &__name {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 15px;
+    font-weight: 600;
+  }
+
+  span {
+    flex: none;
+    font-size: 11px;
+    color: var(--df-sec);
   }
 }
 
@@ -300,9 +372,27 @@
 }
 
 .searchbar {
-  padding: 0.25rem 0.2rem;
-  flex-grow: 1;
+  padding: 0;
+  // The mockup's width, shrinking in a narrow window
+  flex: 0 1 340px;
   min-width: 3rem;
+
+  // The search box of the mockup: a filled field with a hairline ring, and a soft accent ring while typing
+  .input {
+    border: 0;
+    border-radius: 7px;
+    background: var(--df-hover);
+    box-shadow: inset 0 0 0 0.5px var(--df-line);
+
+    &:hover {
+      background: var(--df-hover);
+    }
+
+    &:focus-within {
+      background: var(--df-hover);
+      box-shadow: 0 0 0 3px var(--df-accent-soft), inset 0 0 0 1px var(--df-accent);
+    }
+  }
 
   .btn-icon-large {
     color: var(--text-color-muted);
