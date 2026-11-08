@@ -115,25 +115,22 @@ body {
 
   #outliner {
     background: transparent;
+  }
 
-    // The strip above the sidebar content (where the traffic lights sit) also drags the window
-    &::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: var(--toolbar-height);
-      -webkit-app-region: drag;
+  // The strip above the sidebar content (where the traffic lights sit) drags the window like the rest of the strip
+  // above it, except for its button. The header spans the full sidebar width and toolbar height; a collapsed sidebar
+  // has zero width and the toolbar covers that area.
+  #outliner-header {
+    border-bottom: 0;
+    -webkit-app-region: drag;
+
+    button {
+      -webkit-app-region: no-drag;
     }
   }
 
-  #outliner-content {
-    top: var(--toolbar-height);
-
-    header {
-      background: transparent;
-    }
+  #outliner-content header {
+    background: transparent;
   }
 
   // Sidebar collapsed: the traffic lights now sit over the toolbar, so leave room for them. Kept in full

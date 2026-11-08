@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import { ensureToolbarTabStop } from './toolbar-tab-stop';
 
 interface ToolbarProps {
   children: React.ReactNode;
@@ -23,13 +24,7 @@ const Toolbar: React.FC<ToolbarProps> = (props: ToolbarProps) => {
       return;
     }
 
-    const lastFocusedItem = toolbar.current.querySelector('[tabindex="0"]');
-    if (lastFocusedItem === null) {
-      const firstToolbarItem: HTMLElement | null = toolbar.current.querySelector('[tabindex="-1"]');
-      if (firstToolbarItem !== null) {
-        firstToolbarItem.tabIndex = 0;
-      }
-    }
+    ensureToolbarTabStop(toolbar.current);
   }, [children]);
 
   return (
