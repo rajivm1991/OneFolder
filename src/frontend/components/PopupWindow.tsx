@@ -32,15 +32,15 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
     copyAccentColor(document, externalWindow.document);
     containerEl.setAttribute('data-os', PLATFORM);
 
-    // Hacky func for re-applying CSS to settings when changing that of the main window
-    (window as any).reapplyPopupStyles = () => {
+    // Re-applies CSS to this popup when the main window's style sheets change (e.g. custom theme)
+    const reapplyStyles = () => {
       copyStyles(document, externalWindow.document);
       copyAccentColor(document, externalWindow.document);
     };
+    popupStyleCallbacks.add(reapplyStyles);
     // Called when the system accent colour changes
-    (window as any).reapplyPopupAccent = () => {
-      copyAccentColor(document, externalWindow.document);
-    };
+    const reapplyAccent = () => copyAccentColor(document, externalWindow.document);
+    popupAccentCallbacks.add(reapplyAccent);
 
     externalWindow.addEventListener('beforeunload', props.onClose);
 
@@ -53,7 +53,8 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
     }
 
     return function cleanup() {
-      delete (window as any).reapplyPopupAccent;
+      popupAccentCallbacks.delete(reapplyAccent);
+      popupStyleCallbacks.delete(reapplyStyles);
       externalWindow.close();
       setWin(undefined);
     };
@@ -74,9 +75,30 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
 
 export default PopupWindow;
 
+/** One entry per open popup window */
+const popupAccentCallbacks = new Set<() => void>();
+
+/** One entry per open popup window */
+const popupStyleCallbacks = new Set<() => void>();
+
+/** Re-copies the style sheets (and accent colour) from the main window to every open popup window */
+export function reapplyPopupStyles() {
+  popupStyleCallbacks.forEach((reapply) => reapply());
+}
+
+/** Copies the system accent colour from the main window to every open popup window */
+export function reapplyPopupAccents() {
+  popupAccentCallbacks.forEach((reapply) => reapply());
+}
+
 /** The system accent colour is an inline style on the root element, which is not part of the style sheets */
 function copyAccentColor(sourceDoc: Document, targetDoc: Document) {
-  for (const property of ['--system-accent', '--system-accent-text']) {
+  for (const property of [
+    '--system-accent',
+    '--system-accent-text',
+    '--system-accent-fg-light',
+    '--system-accent-fg-dark',
+  ]) {
     const value = sourceDoc.documentElement.style.getPropertyValue(property);
     if (value) {
       targetDoc.documentElement.style.setProperty(property, value);

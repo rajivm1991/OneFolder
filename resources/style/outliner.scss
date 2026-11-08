@@ -131,7 +131,7 @@
 
     &[aria-pressed='true'],
     &[aria-checked='true'] {
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
     }
   }
 }
@@ -156,7 +156,7 @@
   margin-left: -2px;
 
   &[data-dnd-target='true'] {
-    color: var(--accent-color);
+    color: var(--accent-color-fg);
     border: 2px solid transparent;
 
     &.center {
@@ -229,7 +229,7 @@
 
     &:active,
     &:hover {
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
     }
   }
 }
@@ -307,7 +307,7 @@
     background: var(--background-color-selected);
 
     .sidebar-row__icon {
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
     }
   }
 }

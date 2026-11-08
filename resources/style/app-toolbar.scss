@@ -114,7 +114,7 @@
     font-weight: 600;
 
     svg:first-child {
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
     }
   }
 }
@@ -159,7 +159,7 @@
 
     button {
       background: transparent;
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
       font-weight: 600;
       padding: 0;
       text-decoration: underline;
@@ -317,7 +317,7 @@
     padding: 4px 6px;
     border-radius: 5px;
     background: transparent;
-    color: var(--accent-color);
+    color: var(--accent-color-fg);
     font-weight: 600;
 
     &:disabled {

@@ -56,8 +56,8 @@ button {
 
 .btn-outlined {
   border: 1px solid var(--accent-color);
-  --text-color: var(--accent-color);
-  --text-color-strong: var(--accent-color);
+  --text-color: var(--accent-color-fg);
+  --text-color-strong: var(--accent-color-fg);
 }
 
 .btn-filled,
