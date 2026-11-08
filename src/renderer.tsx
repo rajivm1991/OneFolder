@@ -315,26 +315,33 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
   }
 }
 
-// Keep in sync with --background-color in resources/style/themes.scss
+// These duplicate --background-color of .light / .dark in resources/style/themes.scss (the built-in themes only;
+// custom themes with other backgrounds are not taken into account). Keep both places in sync.
 const LIGHT_THEME_BACKGROUND = '#f0f0f0';
 const DARK_THEME_BACKGROUND = '#1c1e23';
+// Same as the fallback of --accent-color in resources/style/themes.scss
+const DEFAULT_ACCENT_COLOR = '#0a84ff';
 
-/** The theme's accent colour follows the system accent colour; the stylesheet falls back to the macOS blue */
+/**
+ * The theme's accent colour follows the system accent colour; the stylesheet falls back to the macOS blue.
+ * The text-friendly variants (--system-accent-fg-*) are set on the root; themes.scss picks one per theme as
+ * --accent-color-fg, which a custom theme can override.
+ */
 function followSystemAccentColor() {
   const apply = (color: string | undefined) => {
     const style = document.documentElement.style;
     if (color) {
       style.setProperty('--system-accent', color);
       style.setProperty('--system-accent-text', accentTextColor(color));
-      // The accent as a foreground colour, adjusted for contrast against each theme's background
-      style.setProperty('--system-accent-fg-light', accentForegroundColor(color, LIGHT_THEME_BACKGROUND));
-      style.setProperty('--system-accent-fg-dark', accentForegroundColor(color, DARK_THEME_BACKGROUND));
     } else {
       style.removeProperty('--system-accent');
       style.removeProperty('--system-accent-text');
-      style.removeProperty('--system-accent-fg-light');
-      style.removeProperty('--system-accent-fg-dark');
     }
+    // The accent as a foreground colour, adjusted for contrast against each theme's background.
+    // Without a system accent this adjusts the default accent instead.
+    const fg = color ?? DEFAULT_ACCENT_COLOR;
+    style.setProperty('--system-accent-fg-light', accentForegroundColor(fg, LIGHT_THEME_BACKGROUND));
+    style.setProperty('--system-accent-fg-dark', accentForegroundColor(fg, DARK_THEME_BACKGROUND));
     // Popup windows (Settings, Help, About) have their own document
     reapplyPopupAccents();
   };

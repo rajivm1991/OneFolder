@@ -5,6 +5,7 @@ import path from 'path';
 import useLocalStorage from './useLocalStorage';
 import { RendererMessenger } from 'src/ipc/renderer';
 import { AppToaster } from '../components/Toaster';
+import { reapplyPopupStyles } from '../components/PopupWindow';
 import { getExtraResourcePath } from '../../../common/fs';
 
 type CustomThemeContextType = {
@@ -72,12 +73,12 @@ function applyTheme(themeDir: string, filename: string) {
       });
 
     // The style of the settings panel doesn't automatically update, since it's a separate window
-    // This function is exposed in the PopupWindow component as a workaround
-    link.onload = () => (window as any).reapplyPopupStyles?.();
+    // This restyles every open popup window (see PopupWindow)
+    link.onload = () => reapplyPopupStyles();
 
     document.head.appendChild(link);
   } else {
-    (window as any).reapplyPopupStyles?.();
+    reapplyPopupStyles();
   }
 }
 

@@ -32,11 +32,12 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
     copyAccentColor(document, externalWindow.document);
     containerEl.setAttribute('data-os', PLATFORM);
 
-    // Hacky func for re-applying CSS to settings when changing that of the main window
-    (window as any).reapplyPopupStyles = () => {
+    // Re-applies CSS to this popup when the main window's style sheets change (e.g. custom theme)
+    const reapplyStyles = () => {
       copyStyles(document, externalWindow.document);
       copyAccentColor(document, externalWindow.document);
     };
+    popupStyleCallbacks.add(reapplyStyles);
     // Called when the system accent colour changes
     const reapplyAccent = () => copyAccentColor(document, externalWindow.document);
     popupAccentCallbacks.add(reapplyAccent);
@@ -53,6 +54,7 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
 
     return function cleanup() {
       popupAccentCallbacks.delete(reapplyAccent);
+      popupStyleCallbacks.delete(reapplyStyles);
       externalWindow.close();
       setWin(undefined);
     };
@@ -75,6 +77,14 @@ export default PopupWindow;
 
 /** One entry per open popup window */
 const popupAccentCallbacks = new Set<() => void>();
+
+/** One entry per open popup window */
+const popupStyleCallbacks = new Set<() => void>();
+
+/** Re-copies the style sheets (and accent colour) from the main window to every open popup window */
+export function reapplyPopupStyles() {
+  popupStyleCallbacks.forEach((reapply) => reapply());
+}
 
 /** Copies the system accent colour from the main window to every open popup window */
 export function reapplyPopupAccents() {

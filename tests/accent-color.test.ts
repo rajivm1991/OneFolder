@@ -47,6 +47,17 @@ describe('accentForegroundColor', () => {
     expect(accentForegroundColor('#ffffff', DARK_BG)).toBe('#ffffff');
   });
 
+  it('keeps a mid-tone accent that already has enough contrast', () => {
+    expect(contrastRatio('#1d4ed8', LIGHT_BG)).toBeGreaterThanOrEqual(4.5);
+    expect(accentForegroundColor('#1d4ed8', LIGHT_BG)).toBe('#1d4ed8');
+  });
+
+  it('darkens a near-white accent on a light background', () => {
+    const fg = accentForegroundColor('#fafafa', LIGHT_BG);
+    expect(fg).not.toBe('#fafafa');
+    expect(contrastRatio(fg, LIGHT_BG)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('darkens light accents on a light background until they are readable', () => {
     for (const accent of ['#ffcc00', '#ff9500', '#30d158', '#0a84ff']) {
       const fg = accentForegroundColor(accent, LIGHT_BG);
