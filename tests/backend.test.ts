@@ -173,6 +173,20 @@ describe('Backend', () => {
     ]);
   });
 
+  test('countFilesByMonth counts by date taken when it differs from the creation date', async (backend) => {
+    const files = createMockFiles(2);
+    files[0].dateCreated = new Date(2024, 2, 3);
+    files[0].dateTaken = new Date(2021, 5, 10);
+    files[1].dateCreated = new Date(2024, 2, 5);
+    files[1].dateTaken = null;
+    await backend.saveFiles(files);
+
+    expect(await backend.countFilesByMonth()).toEqual([
+      { year: 2024, month: 2, count: 1 },
+      { year: 2021, month: 5, count: 1 },
+    ]);
+  });
+
   test('searchFiles matches a group of alternatives and ANDs it with other conditions', async (backend) => {
     const files = createMockFiles(3);
     files[0].tags = ['t1'];
