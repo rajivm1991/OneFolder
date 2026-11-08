@@ -159,6 +159,7 @@ describe('Backend', () => {
 
   test('countFilesByMonth counts files per month of their creation date', async (backend) => {
     const files = createMockFiles(4);
+    files.forEach((file) => (file.dateTaken = null));
     files[0].dateCreated = new Date(2024, 2, 3);
     files[1].dateCreated = new Date(2024, 2, 30);
     files[2].dateCreated = new Date(2023, 11, 31);

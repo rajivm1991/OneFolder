@@ -446,7 +446,7 @@ export default class Backend implements DataStorage {
   async countFilesByMonth(): Promise<MonthCount[]> {
     // Legacy backend, only used to migrate to SQLite. Reading the dates through the dateCreated index
     // (`orderBy('dateCreated').keys()`) returned nothing under fake-indexeddb, so read the records instead.
-    const dates = (await this.#files.toArray()).map((file) => file.dateCreated);
+    const dates = (await this.#files.toArray()).map((file) => file.dateTaken ?? file.dateCreated);
     return countByMonth(dates);
   }
 
@@ -761,7 +761,9 @@ function filterDateWhere<T>(
 }
 
 function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
-  const { key } = crit;
+  const key = crit.key as string;
+  // The date taken, or until the dateTaken backfill reaches a file, when it was created on disk
+  const read = key === 'dateTaken' ? (t: any) => t.dateTaken ?? t.dateCreated : (t: any) => t[key];
   const start = new Date(crit.value);
   start.setHours(0, 0, 0);
   const end = new Date(crit.value);
@@ -769,17 +771,17 @@ function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
 
   switch (crit.operator) {
     case 'equals':
-      return (t: any) => t[key] >= start || t[key] <= end;
+      return (t: any) => read(t) >= start || read(t) <= end;
     case 'notEqual':
-      return (t: any) => t[key] < start || t[key] > end;
+      return (t: any) => read(t) < start || read(t) > end;
     case 'smallerThan':
-      return (t: any) => t[key] < start;
+      return (t: any) => read(t) < start;
     case 'smallerThanOrEquals':
-      return (t: any) => t[key] <= end;
+      return (t: any) => read(t) <= end;
     case 'greaterThan':
-      return (t: any) => t[key] > end;
+      return (t: any) => read(t) > end;
     case 'greaterThanOrEquals':
-      return (t: any) => t[key] >= start;
+      return (t: any) => read(t) >= start;
     default:
       const _exhaustiveCheck: never = crit.operator;
       return _exhaustiveCheck;
