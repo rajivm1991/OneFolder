@@ -112,8 +112,9 @@ const DnDHelper = createDragReorderHelper('tag-dnd-preview', DnDTagType);
 
 const TagItem = observer((props: ITagItemProps) => {
   const { nodeData, dispatch, expansion, isEditing, submit, pos } = props;
-  const { uiStore } = useStore();
+  const { uiStore, tagStore } = useStore();
   const dndData = useTagDnD();
+  const fileCount = tagStore.getFileCount(nodeData.id);
 
   const show = useContextMenu();
   const handleContextMenu = useCallback(
@@ -315,16 +316,13 @@ const TagItem = observer((props: ITagItemProps) => {
         setText={nodeData.setName}
         isEditing={isEditing}
         onSubmit={submit}
-        tooltip={`${nodeData.path.join(' › ')} (${nodeData.fileCount})`}
+        tooltip={
+          `${nodeData.path.join(' › ')} (${fileCount.toLocaleString()} files` +
+          (nodeData.subTags.length > 0 ? `, ${nodeData.subTags.length} sub-tags)` : ')')
+        }
       />
-      {nodeData.subTags.length > 0 && (
-        <span
-          className="sub-tag-count"
-          style={{ marginLeft: '0.5rem', color: 'gray', fontSize: '0.8em' }}
-        >
-          ({nodeData.subTags.length})
-        </span>
-      )}
+      {/* Files with this tag or any of its sub-tags: what choosing the tag shows */}
+      {fileCount > 0 && <span className="tree-count">{fileCount.toLocaleString()}</span>}
       {/* {!isEditing && <SearchButton onClick={handleQuickQuery} isSearched={nodeData.isSearched} />} */}
     </div>
   );

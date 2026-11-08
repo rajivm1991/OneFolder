@@ -168,6 +168,7 @@ export class ClientFile {
       }
 
       tag.incrementFileCount();
+      this.store.onFileTagsChanged();
 
       if (this.tags.size === 1) {
         this.store.decrementNumUntaggedFiles();
@@ -184,6 +185,7 @@ export class ClientFile {
       }
 
       tag.decrementFileCount();
+      this.store.onFileTagsChanged();
 
       if (this.tags.size === 0) {
         this.store.incrementNumUntaggedFiles();

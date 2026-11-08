@@ -1114,6 +1114,13 @@ class FileStore {
       this.numUntaggedFiles = numUntaggedFiles;
       this.numTotalFiles = numTotalFiles;
     });
+    // Files were added or removed: the per-tag counts changed too
+    this.rootStore.tagStore.scheduleFileCountRefresh();
+  }
+
+  /** The tags of a file changed: update the per-tag counts of the tags panel */
+  onFileTagsChanged(): void {
+    this.rootStore.tagStore.scheduleFileCountRefresh();
   }
 
   /** Number of files per month of their creation date, for the date filter. Counts the whole library. */

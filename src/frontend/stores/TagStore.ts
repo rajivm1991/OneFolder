@@ -1,4 +1,6 @@
-import { action, computed, makeObservable, observable } from 'mobx';
+import { action, computed, makeObservable, observable, runInAction } from 'mobx';
+
+import { debounce } from 'common/timeout';
 
 import { DataStorage } from '../../api/data-storage';
 import { generateId, ID } from '../../api/id';
@@ -19,11 +21,33 @@ class TagStore {
   /** A lookup map to speedup finding entities */
   private readonly tagGraph = observable(new Map<ID, ClientTag>());
 
+  /** Files per tag, including the files of its sub-tags, as counted in the database. See `refreshFileCounts` */
+  private readonly fileCounts = observable.map<ID, number>();
+
+  /** Refreshes the counts shortly after the last change, so that a burst of tagging results in one query */
+  readonly scheduleFileCountRefresh: () => void;
+
   constructor(backend: DataStorage, rootStore: RootStore) {
     this.backend = backend;
     this.rootStore = rootStore;
+    // Longer than the file save debounce, so the database already has the change
+    this.scheduleFileCountRefresh = debounce(() => this.refreshFileCounts(), 500);
 
     makeObservable(this);
+  }
+
+  /** Number of files with this tag or one of its sub-tags */
+  getFileCount(tag: ID): number {
+    return this.fileCounts.get(tag) ?? 0;
+  }
+
+  async refreshFileCounts(): Promise<void> {
+    try {
+      const counts = await this.backend.countFilesByTag();
+      runInAction(() => this.fileCounts.replace(counts));
+    } catch (err) {
+      console.log('Could not count files per tag', err);
+    }
   }
 
   async init(): Promise<void> {
@@ -33,6 +57,7 @@ class TagStore {
     } catch (err) {
       console.log('Could not load tags', err);
     }
+    this.refreshFileCounts();
   }
 
   @action.bound initializeFileCounts(files: ClientFile[]): void {
