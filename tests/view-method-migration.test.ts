@@ -1,4 +1,7 @@
-import { migrateViewMethod, VIEW_METHOD_VERSION } from '../src/frontend/stores/view-method-migration';
+import {
+  migrateViewMethod,
+  VIEW_METHOD_VERSION,
+} from '../src/frontend/stores/view-method-migration';
 
 // Numbers before the Calendar view was removed: List 0, Grid 1, MasonryVertical 2, MasonryHorizontal 3,
 // Calendar 4, Map 5, Faces 6, Duplicates 7. After: Map 4, Faces 5, Duplicates 6.
@@ -21,5 +24,14 @@ describe('migrateViewMethod', () => {
     for (const n of [0, 1, 2, 3, 4, 5, 6]) {
       expect(migrateViewMethod(n, VIEW_METHOD_VERSION)).toBe(n);
     }
+  });
+
+  it('shows Grid for a missing, invalid or out of range value', () => {
+    expect(migrateViewMethod(NaN, undefined)).toBe(1);
+    expect(migrateViewMethod(NaN, VIEW_METHOD_VERSION)).toBe(1);
+    expect(migrateViewMethod(-1, VIEW_METHOD_VERSION)).toBe(1);
+    expect(migrateViewMethod(2.5, VIEW_METHOD_VERSION)).toBe(1);
+    expect(migrateViewMethod(7, VIEW_METHOD_VERSION)).toBe(1);
+    expect(migrateViewMethod(99, undefined)).toBe(1);
   });
 });

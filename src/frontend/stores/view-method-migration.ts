@@ -9,6 +9,8 @@ export const VIEW_METHOD_VERSION = 2;
 const LEGACY_CALENDAR = 4;
 /** The entry that a stored Calendar view opens instead: Grid */
 const GRID = 1;
+/** The last entry of ViewMethod (Duplicates) in the current numbering */
+const LAST_METHOD = 6;
 
 /**
  * Returns the number of the current ViewMethod entry for a stored one.
@@ -16,11 +18,14 @@ const GRID = 1;
  * @param version the stored VIEW_METHOD_VERSION, undefined for preferences from before it existed
  */
 export function migrateViewMethod(stored: number, version: number | undefined): number {
-  if (version !== undefined && version >= VIEW_METHOD_VERSION) {
-    return stored;
+  let method = stored;
+  if (version === undefined || version < VIEW_METHOD_VERSION) {
+    if (stored === LEGACY_CALENDAR) {
+      method = GRID;
+    } else if (stored > LEGACY_CALENDAR) {
+      method = stored - 1;
+    }
   }
-  if (stored === LEGACY_CALENDAR) {
-    return GRID;
-  }
-  return stored > LEGACY_CALENDAR ? stored - 1 : stored;
+  // Missing, invalid or out of range (NaN from a missing value, a number from a newer app version): show Grid
+  return Number.isInteger(method) && method >= 0 && method <= LAST_METHOD ? method : GRID;
 }

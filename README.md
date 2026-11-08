@@ -48,7 +48,6 @@ _Your files, your folder, forever._
 Comming soon:
 
 - Map View
-- Calendar View
 - Detect duplicates
 - HEIC
 
