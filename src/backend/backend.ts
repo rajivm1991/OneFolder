@@ -760,7 +760,7 @@ function filterDateWhere<T>(
   }
 }
 
-function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
+export function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
   const { key } = crit;
   const start = new Date(crit.value);
   start.setHours(0, 0, 0);
@@ -769,7 +769,7 @@ function filterDateLambda<T>(crit: DateConditionDTO<T>): (t: any) => boolean {
 
   switch (crit.operator) {
     case 'equals':
-      return (t: any) => t[key] >= start || t[key] <= end;
+      return (t: any) => t[key] >= start && t[key] <= end;
     case 'notEqual':
       return (t: any) => t[key] < start || t[key] > end;
     case 'smallerThan':
