@@ -3,6 +3,7 @@ import { observer } from 'mobx-react-lite';
 import mapboxgl from 'mapbox-gl';
 import 'mapbox-gl/dist/mapbox-gl.css';
 
+import { lightenColor } from 'common/accent-color';
 import { useStore } from '../../contexts/StoreContext';
 import { ClientFile } from '../../entities/File';
 
@@ -11,11 +12,21 @@ mapboxgl.accessToken = process.env.MAPBOX_ACCESS_TOKEN;
 const DEFAULT_CENTER: [number, number] = [2.5, 48.35];
 const DEFAULT_ZOOM = 3;
 const RECENT_PHOTO_ZOOM = 8;
+const FALLBACK_ACCENT = '#d97757';
+const POINT_TINT = 0.45;
+
+/** The resolved accent colour of the current theme, and a lighter tint of it for single photos */
+function getMapColors(element: HTMLElement | null): { cluster: string; point: string } {
+  const accent = element ? getComputedStyle(element).getPropertyValue('--accent-color').trim() : '';
+  const point = lightenColor(accent, POINT_TINT);
+  return point ? { cluster: accent, point } : { cluster: FALLBACK_ACCENT, point: '#f0b48a' };
+}
 
 /** Centers on the most recently-dated photo, so the map opens over "your" region instead of the whole globe. */
-function getInitialView(
-  files: (ClientFile & { lat: number; lng: number })[],
-): { center: [number, number]; zoom: number } {
+function getInitialView(files: (ClientFile & { lat: number; lng: number })[]): {
+  center: [number, number];
+  zoom: number;
+} {
   if (files.length === 0) {
     return { center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM };
   }
@@ -82,7 +93,7 @@ const MapView = observer(() => {
         source: 'photos',
         filter: ['has', 'point_count'],
         paint: {
-          'circle-color': '#d97757',
+          'circle-color': getMapColors(mapContainer.current).cluster,
           'circle-opacity': 0.85,
           'circle-radius': ['step', ['get', 'point_count'], 16, 25, 22, 100, 28],
         },
@@ -106,7 +117,7 @@ const MapView = observer(() => {
         source: 'photos',
         filter: ['!', ['has', 'point_count']],
         paint: {
-          'circle-color': '#f0b48a',
+          'circle-color': getMapColors(mapContainer.current).point,
           'circle-radius': 8,
           'circle-stroke-width': 2,
           'circle-stroke-color': '#16171a',
@@ -147,6 +158,23 @@ const MapView = observer(() => {
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Follow the accent colour: it changes with the system accent (an inline style on the root element) and with the theme
+  useEffect(() => {
+    const apply = () => {
+      const m = map.current;
+      if (!m || !m.getLayer('clusters') || !m.getLayer('unclustered-point')) {
+        return;
+      }
+      const colors = getMapColors(mapContainer.current);
+      m.setPaintProperty('clusters', 'circle-color', colors.cluster);
+      m.setPaintProperty('unclustered-point', 'circle-color', colors.point);
+    };
+    apply();
+    const observer = new MutationObserver(apply);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+    return () => observer.disconnect();
+  }, [uiStore.theme]);
 
   // Keep the GeoJSON source in sync as files/GPS data change
   useEffect(() => {

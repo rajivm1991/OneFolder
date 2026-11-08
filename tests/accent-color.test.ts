@@ -3,6 +3,7 @@ import {
   accentForegroundColor,
   accentTextColor,
   contrastRatio,
+  lightenColor,
   relativeLuminance,
 } from '../common/accent-color';
 
@@ -71,6 +72,26 @@ describe('contrastRatio', () => {
   it('is 21 for black on white and 1 for identical colours', () => {
     expect(contrastRatio('#000000', '#ffffff')).toBeCloseTo(21, 5);
     expect(contrastRatio('#336699', '#336699')).toBeCloseTo(1, 5);
+  });
+});
+
+describe('lightenColor', () => {
+  it('mixes towards white', () => {
+    expect(lightenColor('#000000', 0)).toBe('#000000');
+    expect(lightenColor('#000000', 1)).toBe('#ffffff');
+    expect(lightenColor('#000000', 0.5)).toBe('#808080');
+  });
+
+  it('expands short hex and clamps the amount', () => {
+    expect(lightenColor('#888', 0)).toBe('#888888');
+    expect(lightenColor('#0a84ff', 2)).toBe('#ffffff');
+    expect(lightenColor('#0a84ff', -1)).toBe('#0a84ff');
+  });
+
+  it('rejects anything that is not a hex colour', () => {
+    expect(lightenColor('blue', 0.5)).toBeUndefined();
+    expect(lightenColor('rgb(1, 2, 3)', 0.5)).toBeUndefined();
+    expect(lightenColor('', 0.5)).toBeUndefined();
   });
 });
 
