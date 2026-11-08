@@ -1,0 +1,91 @@
+// The bar floating at the bottom of the content area while files are selected.
+// Sizes, radii and spacing follow the approved mockup. The colours are the mockup tokens that the date filter defines
+// (--df-*), until the app-wide theme chunk replaces the theme variables.
+.selection-bar {
+  position: absolute;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 8px 0 16px;
+  border-radius: 22px;
+  background: var(--df-float);
+  color: var(--df-text);
+  box-shadow: 0 0 0 0.5px var(--df-line), 0 8px 28px rgba(0, 0, 0, 0.35);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  // The bar is not part of the window drag region
+  -webkit-app-region: no-drag;
+
+  button {
+    font: inherit;
+    border: 0;
+    cursor: default;
+
+    &:focus-visible {
+      outline: 2px solid var(--df-accent);
+      outline-offset: 1px;
+    }
+
+    &:disabled {
+      opacity: 0.4;
+    }
+  }
+
+  &__count {
+    padding-right: 6px;
+    font-weight: 600;
+    // Keeps the bar from changing width with each digit while selecting
+    font-variant-numeric: tabular-nums;
+  }
+
+  &__tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 12px;
+    border-radius: 14px;
+    background: var(--df-accent);
+    color: #fff;
+    font-weight: 600;
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+  }
+
+  &__icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--df-sec);
+
+    &:hover:not(:disabled) {
+      background: var(--df-hover);
+      color: var(--df-text);
+    }
+  }
+
+  // The tag editor opens above the bar instead of below the toolbar
+  .floating-dialog {
+    top: auto;
+    bottom: calc(100% + 12px);
+  }
+
+  // The panel grows upwards from the bar, so dragging the bottom edge to resize would feel inverted, and a
+  // fixed maximum could run under the toolbar in a short window
+  #tag-editor {
+    resize: none;
+    max-height: min(32rem, calc(100vh - 14rem));
+  }
+}
