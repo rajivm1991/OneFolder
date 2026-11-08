@@ -54,8 +54,8 @@ describe('readDateFilter', () => {
 
   it('returns undefined for a hand-made range that is not a whole year or month', () => {
     const crits = [
-      new ClientDateSearchCriteria('dateCreated', new Date(2024, 0, 1), 'greaterThanOrEquals'),
-      new ClientDateSearchCriteria('dateCreated', new Date(2024, 4, 1), 'smallerThan'),
+      new ClientDateSearchCriteria('dateTaken', new Date(2024, 0, 1), 'greaterThanOrEquals'),
+      new ClientDateSearchCriteria('dateTaken', new Date(2024, 4, 1), 'smallerThan'),
     ];
     expect(readDateFilter(crits)).toBeUndefined();
   });
@@ -68,7 +68,7 @@ describe('readDateFilter', () => {
 
 describe('withoutDateFilter', () => {
   const handTypedBefore = () =>
-    new ClientDateSearchCriteria('dateCreated', new Date(2020, 0, 1), 'smallerThan');
+    new ClientDateSearchCriteria('dateTaken', new Date(2020, 0, 1), 'smallerThan');
   const handTypedModified = () =>
     new ClientDateSearchCriteria('dateModified', new Date(2020, 0, 1), 'greaterThanOrEquals');
 
@@ -83,8 +83,8 @@ describe('withoutDateFilter', () => {
 
   it('leaves hand-typed date terms alone when there is no date filter', () => {
     const crits = [
-      new ClientDateSearchCriteria('dateCreated', new Date(2024, 0, 1), 'greaterThanOrEquals'),
-      new ClientDateSearchCriteria('dateCreated', new Date(2024, 4, 1), 'smallerThan'),
+      new ClientDateSearchCriteria('dateTaken', new Date(2024, 0, 1), 'greaterThanOrEquals'),
+      new ClientDateSearchCriteria('dateTaken', new Date(2024, 4, 1), 'smallerThan'),
     ];
     expect(withoutDateFilter(crits)).toEqual(crits);
   });
@@ -115,7 +115,7 @@ describe('date filter criteria against the search filter', () => {
   const lambdas = (value: { year: number; month?: number }) =>
     dateFilterCriteria(value).map((c) => filterLambda(c.toCondition() as any));
   const matches = (value: { year: number; month?: number }, date: Date) =>
-    lambdas(value).every((fn) => fn({ dateCreated: date }));
+    lambdas(value).every((fn) => fn({ dateTaken: date, dateCreated: new Date(1999, 0, 1) }));
 
   it('includes the first and last moments of a month and excludes the neighbours', () => {
     const march = { year: 2024, month: 2 };
@@ -123,6 +123,17 @@ describe('date filter criteria against the search filter', () => {
     expect(matches(march, new Date(2024, 2, 31, 23, 59, 59))).toBe(true);
     expect(matches(march, new Date(2024, 1, 29, 23, 59, 59))).toBe(false);
     expect(matches(march, new Date(2024, 3, 1, 0, 0, 0))).toBe(false);
+  });
+
+  it('uses the date taken, and the creation date only while the date taken is unknown', () => {
+    const may2015 = { year: 2015, month: 4 };
+    const [from, until] = lambdas(may2015);
+    const copiedLater = { dateTaken: new Date(2015, 4, 5), dateCreated: new Date(2024, 0, 15) };
+    expect(from(copiedLater) && until(copiedLater)).toBe(true);
+    const unknown = { dateTaken: null, dateCreated: new Date(2015, 4, 7) };
+    expect(from(unknown) && until(unknown)).toBe(true);
+    const unknownElsewhere = { dateTaken: null, dateCreated: new Date(2024, 0, 15) };
+    expect(from(unknownElsewhere) && until(unknownElsewhere)).toBe(false);
   });
 
   it('includes all of a year and nothing outside it', () => {

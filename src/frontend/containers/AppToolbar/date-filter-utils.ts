@@ -3,7 +3,8 @@ import { ClientDateSearchCriteria, ClientFileSearchCriteria } from '../../entiti
 /** A year, or one month of a year (`month` is 0-11). */
 export type DateFilterValue = { year: number; month?: number };
 
-const KEY = 'dateCreated';
+// The date taken, or the creation date for files whose date taken is not known yet (as the sort does)
+const KEY = 'dateTaken';
 
 /** The first day of the range and the first day after it, in local time. */
 export function dateRange({ year, month }: DateFilterValue): { start: Date; end: Date } {
@@ -13,7 +14,7 @@ export function dateRange({ year, month }: DateFilterValue): { start: Date; end:
   return { start: new Date(year, month, 1), end: new Date(year, month + 1, 1) };
 }
 
-/** The two search criteria that make up a date filter: created on or after the start, and before the end. */
+/** The two search criteria that make up a date filter: taken on or after the start, and before the end. */
 export function dateFilterCriteria(value: DateFilterValue): ClientDateSearchCriteria[] {
   const { start, end } = dateRange(value);
   return [
@@ -35,7 +36,7 @@ function valueOfRange(start: Date, end: Date): DateFilterValue | undefined {
 }
 
 /**
- * Finds the pair of criteria that make up a date filter: created on or after the first of a month, and
+ * Finds the pair of criteria that make up a date filter: taken on or after the first of a month, and
  * before the end of exactly that year or month. Other date terms, such as a range typed in by hand in the
  * advanced search, are not part of the filter and are left alone.
  */
