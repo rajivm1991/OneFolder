@@ -50,7 +50,7 @@ class FileStore {
   /** The origin of the current files that are shown */
   @observable private content: Content = Content.All;
   @observable orderDirection: OrderDirection = OrderDirection.Desc;
-  @observable orderBy: OrderBy<FileDTO> = 'dateAdded';
+  @observable orderBy: OrderBy<FileDTO> = 'dateTaken';
   @observable numTotalFiles = 0;
   @observable numUntaggedFiles = 0;
   @observable numMissingFiles = 0;
