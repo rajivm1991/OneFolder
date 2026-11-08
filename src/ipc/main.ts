@@ -1,6 +1,8 @@
 import { BrowserWindow, ipcMain, WebContents } from 'electron';
 import {
+  ACCENT_COLOR_CHANGED,
   ADD_TAGS_TO_FILE,
+  GET_ACCENT_COLOR,
   CHECK_FOR_UPDATES,
   CLEAR_DATABASE,
   CLOSED_PREVIEW_WINDOW,
@@ -105,7 +107,13 @@ export class MainMessenger {
   static fullscreenChanged = (wc: WebContents, isFullScreen: boolean) =>
     wc.send(FULL_SCREEN_CHANGED, isFullScreen);
 
-  static onSetZoomFactor = (cb: (level: number) => void) =>
+  static onGetAccentColor = (cb: () => string | undefined) =>
+    ipcMain.on(GET_ACCENT_COLOR, (e) => (e.returnValue = cb()));
+
+  static accentColorChanged = (wc: WebContents, color: string | undefined) =>
+    wc.send(ACCENT_COLOR_CHANGED, color);
+
+  static onSetZoomFactor =(cb: (level: number) => void) =>
     ipcMain.handle(SET_ZOOM_FACTOR, (_, level) => cb(level));
 
   static onGetZoomFactor = (cb: () => number) =>

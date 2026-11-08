@@ -24,7 +24,7 @@
 
 .toast {
   background: var(--accent-color);
-  color: white;
+  color: var(--accent-color-text);
   width: 22.5rem;
   margin-bottom: 1rem;
   padding: 0.25rem 0.5rem;
@@ -42,7 +42,7 @@
   }
 
   button {
-    color: white;
+    color: var(--accent-color-text);
 
     &:hover {
       background: rgba(255, 255, 255, 0.15);

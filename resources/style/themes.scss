@@ -7,7 +7,16 @@
 
   --background-color: rgb(28, 30, 35);
   --background-color-alt: rgb(35, 37, 46);
-  --background-color-selected: #2e5b84;
+  // The selection colour follows the accent colour
+  --background-color-selected: color-mix(in srgb, var(--accent-color) 40%, var(--background-color));
+
+  // The approved mockup's palette, used by the sidebar, toolbar, date filter and selection bar
+  --ui-text: #f5f5f7;
+  --ui-text-secondary: #a1a1a8;
+  --ui-line: rgba(255, 255, 255, 0.09);
+  --ui-hover: rgba(255, 255, 255, 0.07);
+  --ui-float: #2c2e35;
+  --accent-color-soft: color-mix(in srgb, var(--accent-color) 28%, transparent);
 
   --shade1: rgb(21, 23, 26);
   --shade2: rgb(18, 18, 24);
@@ -26,7 +35,14 @@
 
   --background-color: rgb(240, 240, 240);
   --background-color-alt: rgb(248, 248, 248);
-  --background-color-selected: #9ec6eb;
+  --background-color-selected: color-mix(in srgb, var(--accent-color) 40%, var(--background-color));
+
+  --ui-text: #1d1d1f;
+  --ui-text-secondary: #66666c;
+  --ui-line: rgba(0, 0, 0, 0.1);
+  --ui-hover: rgba(0, 0, 0, 0.05);
+  --ui-float: #ffffff;
+  --accent-color-soft: color-mix(in srgb, var(--accent-color) 16%, transparent);
 
   --shade1: rgb(232, 232, 232);
   --shade2: rgb(221, 221, 221);
@@ -43,10 +59,20 @@
   --accent-color-red: rgb(250, 52, 37);
   --accent-color-yellow: rgb(255, 193, 47);
   --accent-color-green: #7af2a6;
+  // Shared radii and type sizes
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --font-size-title: 15px;
+  --font-size-body: 13px;
+  --font-size-small: 11px;
+
   --box-shadow: 0.125rem 0.25rem 1rem rgba(0, 0, 0, 0.125);
-  --accent-color: var(--accent-color-blue);
+  // The system accent colour (set on the root element by the app), or the macOS blue
+  --accent-color: var(--system-accent, #0a84ff);
   --accent-color-variation: var(--background-color-selected);
-  --accent-color-text: rgb(255, 255, 255);
+  // White unless the app sets a text colour that suits the system accent colour (see followSystemAccentColor)
+  --accent-color-text: var(--system-accent-text, rgb(255, 255, 255));
 
   --input-color: var(--shade1);
   --input-color-hover: var(--shade2);

@@ -103,6 +103,9 @@ export type ThemeMessage = {
   theme: 'light' | 'dark';
 };
 
+export const GET_ACCENT_COLOR = 'GET_ACCENT_COLOR';
+export const ACCENT_COLOR_CHANGED = 'ACCENT_COLOR_CHANGED';
+
 export const IS_RUNNING_IN_BACKGROUND = 'IS_RUN_IN_BACKGROUND';
 export const SET_RUN_IN_BACKGROUND = 'SET_RUN_IN_BACKGROUND';
 export type RunInBackgroundMessage = {

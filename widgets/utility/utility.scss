@@ -17,10 +17,12 @@
 
 [data-message-intent='success'] {
   --accent-color: var(--accent-color-green);
+  --accent-color-text: #1d1d1f;
 }
 
 [data-message-intent='warning'] {
   --accent-color: var(--accent-color-yellow);
+  --accent-color-text: #1d1d1f;
 }
 
 [data-message-intent='danger'] {
