@@ -443,6 +443,17 @@ export default class Backend implements DataStorage {
     });
   }
 
+  async countFilesByTag(): Promise<Record<ID, number>> {
+    // Legacy backend, only used to migrate to SQLite: direct counts are enough, nothing displays them
+    const counts: Record<ID, number> = {};
+    await this.#files.each((file) => {
+      for (const tag of file.tags) {
+        counts[tag] = (counts[tag] ?? 0) + 1;
+      }
+    });
+    return counts;
+  }
+
   async countFilesByMonth(): Promise<MonthCount[]> {
     // Legacy backend, only used to migrate to SQLite. Reading the dates through the dateCreated index
     // (`orderBy('dateCreated').keys()`) returned nothing under fake-indexeddb, so read the records instead.

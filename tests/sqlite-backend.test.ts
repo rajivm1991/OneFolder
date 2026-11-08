@@ -198,6 +198,21 @@ describe('SqliteBackend', () => {
     expect(results.map((f) => f.id)).toEqual(['f1']);
   });
 
+  it('countFilesByTag counts distinct files per tag, including the files of sub-tags', async () => {
+    const backend = await initBackend();
+    await backend.createTag({ ...mockTag, id: 'child' });
+    await backend.createTag({ ...mockTag, id: 'parent', subTags: ['child'] });
+    await backend.createTag({ ...mockTag, id: 'unused' });
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({ id: 'f1', absolutePath: '/drives/school/f1.jpg', tags: ['parent', 'child'] }),
+      createMockFile({ id: 'f2', absolutePath: '/drives/school/f2.jpg', tags: ['child'] }),
+      createMockFile({ id: 'f3', absolutePath: '/drives/school/f3.jpg', tags: ['parent'] }),
+      createMockFile({ id: 'f4', absolutePath: '/drives/school/f4.jpg', tags: [] }),
+    ]);
+    // f1 has both parent and child but counts once for the parent
+    expect(await backend.countFilesByTag()).toEqual({ parent: 3, child: 2 });
+  });
+
   it('searchFiles supports an array "contains" condition for tags, with OR semantics across two conditions', async () => {
     const backend = await initBackend();
     await backend.createTag(mockTag);

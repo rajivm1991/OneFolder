@@ -51,6 +51,8 @@ export interface DataStorage {
   countFiles(): Promise<[fileCount: number, untaggedFileCount: number]>;
   /** Number of files per month of their creation date, in local time. Months without files are left out. `month` is 0-11. */
   countFilesByMonth(): Promise<MonthCount[]>;
+  /** Number of distinct files per tag, counting the files of its sub-tags too. Tags without files are left out. */
+  countFilesByTag(): Promise<Record<ID, number>>;
   clear(): Promise<void>;
   clearFilesOnly(): Promise<void>;
 

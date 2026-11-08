@@ -689,6 +689,28 @@ export class SqliteBackend implements DataStorage {
     return [fileCount, untaggedFileCount];
   }
 
+  async countFilesByTag(): Promise<Record<ID, number>> {
+    // For every tag, walk down its sub-tags, then count the distinct files that have any tag in that subtree
+    const rows = this.#db
+      .prepare(
+        `WITH RECURSIVE subtree(root_id, tag_id) AS (
+           SELECT id, id FROM tags
+           UNION
+           SELECT subtree.root_id, s.sub_tag_id
+           FROM subtree JOIN tag_subtags s ON s.tag_id = subtree.tag_id
+         )
+         SELECT subtree.root_id AS tagId, COUNT(DISTINCT ft.file_id) AS c
+         FROM subtree JOIN file_tags ft ON ft.tag_id = subtree.tag_id
+         GROUP BY subtree.root_id`,
+      )
+      .all() as { tagId: ID; c: number }[];
+    const counts: Record<ID, number> = {};
+    for (const row of rows) {
+      counts[row.tagId] = row.c;
+    }
+    return counts;
+  }
+
   async countFilesByMonth(): Promise<MonthCount[]> {
     // The date taken, or until the dateTaken backfill reaches a file, when it was created on disk
     const rows = this.#db

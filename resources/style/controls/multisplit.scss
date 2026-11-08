@@ -39,7 +39,8 @@
     .resizable-collapse {
       // height: 100%;
       width: 100%;
-      overflow: auto;
+      // Long names truncate with an ellipsis, so never scroll sideways
+      overflow: hidden auto;
 
       // workaround for the collapse transition interfering with the flex-grow transition
       > .collapse {
