@@ -14,8 +14,8 @@
   width: 220px;
   background: var(--background-color-alt);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
   overflow: hidden;
   z-index: 10;
 
@@ -37,10 +37,12 @@
     right: 8px;
     width: 22px;
     height: 22px;
+    padding: 0;
     border-radius: 50%;
     background: rgba(0, 0, 0, 0.5);
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
     color: #fff;
+    cursor: pointer;
   }
 
   &__body {
@@ -48,7 +50,7 @@
   }
 
   &__name {
-    font-size: 12px;
+    font-size: var(--font-size-body);
     font-weight: 600;
     color: var(--text-color-strong);
     white-space: nowrap;
@@ -57,7 +59,7 @@
   }
 
   &__coords {
-    font-size: 11px;
+    font-size: var(--font-size-small);
     color: var(--text-color-muted);
     margin-top: 2px;
   }
@@ -65,7 +67,7 @@
   &__open {
     display: block;
     margin-top: 8px;
-    font-size: 12px;
+    font-size: var(--font-size-body);
     font-weight: 600;
     color: var(--accent-color);
   }

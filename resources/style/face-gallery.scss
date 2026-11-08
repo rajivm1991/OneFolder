@@ -2,20 +2,37 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
+  font-size: var(--font-size-body);
 }
 
 .face-gallery-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.face-detection-progress {
+  font-size: var(--font-size-small);
+  color: var(--text-color-muted);
+}
+
+.face-detection-error {
+  font-size: var(--font-size-small);
+  color: var(--text-color-strong);
+}
+
+.face-gallery-empty {
+  font-size: var(--font-size-body);
+  color: var(--text-color-muted);
 }
 
 .face-gallery-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding: 0 8px 8px;
+  padding: 16px;
 }
 
 // The item shrink-wraps the image exactly, so the overlay's percentage-positioned boxes
@@ -24,9 +41,12 @@
   position: relative;
   display: inline-block;
   line-height: 0;
+  // No overflow: hidden here, so boxes on faces at the photo's edge aren't clipped; the image
+  // and placeholder round their own corners instead.
 
   img {
     display: block;
+    border-radius: var(--radius-md);
     height: 200px;
     width: auto;
   }
@@ -35,12 +55,20 @@
 .face-gallery-placeholder {
   width: 200px;
   height: 200px;
+  border-radius: var(--radius-md);
   background: var(--background-color-alt, rgba(128, 128, 128, 0.15));
 }
 
+// A box is an outline (a shape, not just a colour), drawn in the accent colour with a
+// contrasting inner line so it stays visible on any photo.
 .face-bounding-box {
   position: absolute;
-  border: 2px solid #4caf50;
+  border: 2px solid var(--accent-color);
+  border-radius: var(--radius-sm);
+  // inner light line + outer dark ring: visible on photos matching the accent colour
+  box-shadow:
+    inset 0 0 0 1px var(--accent-color-text),
+    0 0 0 1px rgba(0, 0, 0, 0.6);
   box-sizing: border-box;
   pointer-events: none;
 }
@@ -49,7 +77,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  padding: 8px;
+  padding: 16px;
 }
 
 .person-tile {
@@ -57,10 +85,18 @@
   flex-direction: column;
   align-items: center;
   gap: 4px;
-  padding: 8px;
-  border: none;
+  padding: 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
   background: none;
+  color: var(--text-color);
+  font-size: var(--font-size-body);
   cursor: pointer;
+
+  &:hover {
+    background: var(--hover-color);
+    border-color: var(--border-color);
+  }
 }
 
 // Square frame the representative face is cropped into: the <img> inside is absolutely
@@ -71,6 +107,7 @@
   height: 96px;
   overflow: hidden;
   border-radius: 50%;
+  border: 1px solid var(--border-color);
   background: var(--background-color-alt, rgba(128, 128, 128, 0.15));
 
   .face-gallery-placeholder {
@@ -81,13 +118,15 @@
 
 .person-tile-name {
   font-weight: 600;
+  color: var(--text-color-strong);
 }
 
 .person-tile-count {
-  font-size: 0.85em;
-  opacity: 0.7;
+  font-size: var(--font-size-small);
+  color: var(--text-color-muted);
 }
 
 .person-name-input {
+  font-size: var(--font-size-title);
   font-weight: 600;
 }
