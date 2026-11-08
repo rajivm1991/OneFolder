@@ -58,7 +58,9 @@ export function initSqliteSchema(db: Database.Database): void {
       -- 0 = GPS not yet checked (DTO lat/lng undefined), 1 = checked (lat/lng is null or a number).
       -- NULL only on rows written before these columns existed; see SqliteBackend#rowToFile.
       latChecked INTEGER,
-      lngChecked INTEGER
+      lngChecked INTEGER,
+      -- EXIF capture date (or disk modified date as a fallback). NULL = not resolved yet.
+      dateTaken TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_files_locationId ON files(locationId);
 
@@ -117,6 +119,7 @@ export function initSqliteSchema(db: Database.Database): void {
   // before a column was introduced need it added explicitly.
   addColumnIfMissing(db, 'files', 'latChecked', 'INTEGER');
   addColumnIfMissing(db, 'files', 'lngChecked', 'INTEGER');
+  addColumnIfMissing(db, 'files', 'dateTaken', 'TEXT');
 }
 
 function addColumnIfMissing(

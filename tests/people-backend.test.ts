@@ -130,6 +130,7 @@ describe('Backend people / face clustering API', () => {
         annotations: '{}',
         lat: undefined,
         lng: undefined,
+      dateTaken: null,
       },
     ]);
     await backend.saveFaceDetectionResult(
@@ -205,6 +206,7 @@ describe('FaceDetectionStore + Backend: people cache vs backend-side pruning', (
       annotations: '{}',
       lat: undefined,
       lng: undefined,
+      dateTaken: null,
     };
   }
 

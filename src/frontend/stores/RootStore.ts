@@ -13,6 +13,7 @@ import ImageLoader from '../image/ImageLoader';
 import { RendererMessenger } from 'src/ipc/renderer';
 import SearchStore from './SearchStore';
 import { runGpsBackfill } from './GpsBackfill';
+import { runDateTakenBackfill } from './DateTakenBackfill';
 import { FaceDetectionStore } from './FaceDetectionStore';
 import { detectFacesUsingWorker } from '../image/FaceDetectionDispatch';
 
@@ -130,9 +131,11 @@ class RootStore {
       // One-time, low-priority: backfill GPS coordinates for files that haven't been
       // checked yet (e.g. existing libraries after the lat/lng migration). Runs in the
       // background; Map View fills in as files complete. Not awaited — must not block startup.
-      runGpsBackfill(rootStore.fileStore.fileList.slice(), rootStore.exifTool).catch((e) =>
-        console.error('GPS backfill failed', e),
-      );
+      runGpsBackfill(rootStore.fileStore.fileList.slice(), rootStore.exifTool)
+        .catch((e) => console.error('GPS backfill failed', e))
+        // Same idea for the EXIF capture date; sequential so the two passes don't compete for ExifTool.
+        .then(() => runDateTakenBackfill(rootStore.fileStore.fileList.slice(), rootStore.exifTool))
+        .catch((e) => console.error('Date taken backfill failed', e));
     });
 
     // Then, look for any new or removed images, and refetch if necessary

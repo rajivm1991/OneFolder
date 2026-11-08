@@ -40,6 +40,8 @@ interface IExtendedMetaData extends IMetaData {
   /** Decimal-degree GPS coordinates, or null when the file has no GPS EXIF data */
   lat: number | null;
   lng: number | null;
+  /** EXIF capture date, else the file's modified date on disk. null if not read (backfill handles it). */
+  dateTaken: Date | null;
 }
 
 /**
@@ -80,6 +82,8 @@ export class ClientFile {
   @observable isBroken?: boolean;
   @observable lat: number | null | undefined;
   @observable lng: number | null | undefined;
+  /** EXIF capture date (disk modified date if none); null until the backfill resolves it */
+  @observable dateTaken: Date | null;
 
   constructor(store: FileStore, fileProps: FileDTO, exifTool: ExifIO) {
     this.store = store;
@@ -100,6 +104,7 @@ export class ClientFile {
     this.extension = fileProps.extension;
     this.lat = fileProps.lat;
     this.lng = fileProps.lng;
+    this.dateTaken = fileProps.dateTaken;
 
     const location = store.getLocation(this.locationId);
     this.absolutePath = Path.join(location.path, this.relativePath);
@@ -141,6 +146,10 @@ export class ClientFile {
   @action.bound setGpsCoordinates(lat: number | null, lng: number | null): void {
     this.lat = lat;
     this.lng = lng;
+  }
+
+  @action.bound setDateTaken(dateTaken: Date): void {
+    this.dateTaken = dateTaken;
   }
 
   @action.bound setDimensions(width: number, height: number): void {
@@ -288,6 +297,7 @@ export class ClientFile {
       annotations: this.annotations, // serialize annotations object to string
       lat: this.lat,
       lng: this.lng,
+      dateTaken: this.dateTaken,
     };
   }
 
@@ -338,11 +348,13 @@ export async function getMetaDataWithTags(
   if (!readTags) {
     // Use existing method for backwards compatibility
     const basicMetadata = await getMetaData(stats, imageLoader);
-    return { ...basicMetadata, lat: null, lng: null };
+    return { ...basicMetadata, lat: null, lng: null, dateTaken: null };
   }
 
   // Use the new combined ExifTool call for optimal performance
-  const { dimensions, tags, gps } = await imageLoader.getImageResolutionAndTags(stats.absolutePath);
+  const { dimensions, tags, gps, dateTaken } = await imageLoader.getImageResolutionAndTags(
+    stats.absolutePath,
+  );
 
   return {
     name: Path.basename(path),
@@ -354,6 +366,7 @@ export async function getMetaDataWithTags(
     tagHierarchies: tags,
     lat: gps?.lat ?? null,
     lng: gps?.lng ?? null,
+    dateTaken: dateTaken ?? stats.dateModified,
   };
 }
 

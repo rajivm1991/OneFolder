@@ -29,6 +29,11 @@ export type FileDTO = {
   height: number;
   /** Date when this file was created (from the OS, not related to OneFolder) */
   dateCreated: Date;
+  /**
+   * When the photo was actually taken: EXIF DateTimeOriginal/CreateDate, falling back to the file's
+   * modified date on disk when there is no EXIF date. null = not resolved yet (the backfill fills it in).
+   */
+  dateTaken: Date | null;
 
   /** file annotations in W3C WebAnnotation model. */
   annotations: string;

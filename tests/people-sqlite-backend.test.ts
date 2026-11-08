@@ -81,6 +81,7 @@ describe('SqliteBackend people / face clustering API', () => {
       annotations: '{}',
       lat: undefined,
       lng: undefined,
+      dateTaken: null,
       ...overrides,
     };
   }

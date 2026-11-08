@@ -63,6 +63,7 @@ const sortMenuData: Array<{
   // { prop: 'absolutePath', icon: IconSet.FOLDER_OPEN, text: 'Path' },
   { prop: 'extension', icon: IconSet.FILTER_FILE_TYPE, text: 'File type' },
   { prop: 'size', icon: IconSet.FILTER_FILTER_DOWN, text: 'File size' },
+  { prop: 'dateTaken', icon: IconSet.FILTER_DATE, text: 'Date taken (EXIF)' },
   { prop: 'dateAdded', icon: IconSet.FILTER_DATE, text: 'Date added' },
   { prop: 'dateModified', icon: IconSet.FILTER_DATE, text: 'Date modified' },
   { prop: 'dateCreated', icon: IconSet.FILTER_DATE, text: 'Date created' },

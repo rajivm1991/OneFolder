@@ -687,6 +687,7 @@ export async function pathToIFile(
     annotations: '{}',
     lat: undefined,
     lng: undefined,
+    dateTaken: null, // resolved by the date taken backfill
     ...(await getMetaData(stats, imageLoader)),
   };
 }
@@ -758,6 +759,7 @@ export async function pathToIFileWithMetadata(
     dateCreated: extendedMetadata.dateCreated,
     lat: extendedMetadata.lat,
     lng: extendedMetadata.lng,
+    dateTaken: extendedMetadata.dateTaken,
   };
 }
 

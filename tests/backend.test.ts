@@ -49,6 +49,7 @@ describe('Backend', () => {
         annotations: '',
         lat: undefined,
         lng: undefined,
+        dateTaken: null,
       });
     }
 
@@ -148,6 +149,7 @@ describe('Backend', () => {
       annotations: '{}',
       lat: 48.8566,
       lng: 2.3522,
+      dateTaken: null,
     };
     await backend.saveFiles([file]);
     const [saved] = await backend.fetchFilesByKey('id', 'file1');

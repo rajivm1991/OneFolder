@@ -232,6 +232,7 @@ class ImageLoader {
     dimensions: { width: number; height: number };
     tags: string[][];
     gps: { lat: number; lng: number } | null;
+    dateTaken: Date | null;
   }> {
     const result = await this.exifIO.getDimensionsAndTags(absolutePath);
 
