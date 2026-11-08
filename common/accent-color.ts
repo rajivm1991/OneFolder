@@ -23,6 +23,30 @@ export function relativeLuminance(color: string): number | undefined {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
+/**
+ * Mixes a "#rgb" or "#rrggbb" colour towards white by the given amount (0 = unchanged, 1 = white) and returns "#rrggbb".
+ * Returns undefined for anything that is not a hex colour.
+ */
+export function lightenColor(color: string, amount: number): string | undefined {
+  const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(color.trim());
+  if (!match) {
+    return undefined;
+  }
+  const hex = match[1].length === 3 ? match[1].replace(/./g, '$&$&') : match[1];
+  const t = Math.min(1, Math.max(0, amount));
+  return (
+    '#' +
+    [0, 2, 4]
+      .map((i) => {
+        const channel = parseInt(hex.slice(i, i + 2), 16);
+        return Math.round(channel + (255 - channel) * t)
+          .toString(16)
+          .padStart(2, '0');
+      })
+      .join('')
+  );
+}
+
 const LIGHT_TEXT = '#ffffff';
 const DARK_TEXT = '#1d1d1f';
 // A design choice, not a WCAG pass: white stays on the native macOS blue, purple, pink, red and graphite (luminance 0.24 to 0.28)
@@ -36,5 +60,7 @@ const DARK_TEXT_LUMINANCE_THRESHOLD = 0.35;
  */
 export function accentTextColor(accent: string): string {
   const luminance = relativeLuminance(accent);
-  return luminance !== undefined && luminance > DARK_TEXT_LUMINANCE_THRESHOLD ? DARK_TEXT : LIGHT_TEXT;
+  return luminance !== undefined && luminance > DARK_TEXT_LUMINANCE_THRESHOLD
+    ? DARK_TEXT
+    : LIGHT_TEXT;
 }
