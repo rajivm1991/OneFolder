@@ -13,7 +13,7 @@ import ContentView from './ContentView';
 import Outliner from './Outliner';
 
 const Main = () => {
-  const { uiStore } = useStore();
+  const { uiStore, fileStore } = useStore();
   const data = useRef(observable({ source: undefined, target: undefined }));
 
   useEffect(() => {
@@ -58,7 +58,10 @@ const Main = () => {
       e.preventDefault();
       uiStore.openToolbarTagPopover();
     } else if (matches(hotkeyMap.deleteSelection)) {
-      uiStore.openMoveFilesToTrash();
+      // Missing files are not on disk, so there is nothing to move to the trash
+      if (!fileStore.showsMissingContent) {
+        uiStore.openMoveFilesToTrash();
+      }
     }
   });
 
