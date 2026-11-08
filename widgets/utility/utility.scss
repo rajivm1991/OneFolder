@@ -10,19 +10,3 @@
   height: 1px;
   white-space: nowrap;
 }
-
-[data-message-intent='info'] {
-  --accent-color: var(--accent-color-blue);
-}
-
-[data-message-intent='success'] {
-  --accent-color: var(--accent-color-green);
-}
-
-[data-message-intent='warning'] {
-  --accent-color: var(--accent-color-yellow);
-}
-
-[data-message-intent='danger'] {
-  --accent-color: var(--accent-color-red);
-}

@@ -12,6 +12,7 @@ import { autorun, reaction, runInAction } from 'mobx';
 import React from 'react';
 import { Root, createRoot } from 'react-dom/client';
 
+import { accentTextColor } from 'common/accent-color';
 import { IS_DEV } from 'common/process';
 import { IS_PREVIEW_WINDOW, WINDOW_STORAGE_KEY } from 'common/window';
 import { RendererMessenger } from 'src/ipc/renderer';
@@ -316,11 +317,16 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
 /** The theme's accent colour follows the system accent colour; the stylesheet falls back to the macOS blue */
 function followSystemAccentColor() {
   const apply = (color: string | undefined) => {
+    const style = document.documentElement.style;
     if (color) {
-      document.documentElement.style.setProperty('--system-accent', color);
+      style.setProperty('--system-accent', color);
+      style.setProperty('--system-accent-text', accentTextColor(color));
     } else {
-      document.documentElement.style.removeProperty('--system-accent');
+      style.removeProperty('--system-accent');
+      style.removeProperty('--system-accent-text');
     }
+    // Popup windows (Settings, Help, About) have their own document
+    (window as any).reapplyPopupAccent?.();
   };
   apply(RendererMessenger.getAccentColor());
   RendererMessenger.onAccentColorChanged(apply);

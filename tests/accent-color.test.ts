@@ -1,4 +1,35 @@
-import { accentColorToCss } from '../common/accent-color';
+import { accentColorToCss, accentTextColor, relativeLuminance } from '../common/accent-color';
+
+describe('relativeLuminance', () => {
+  it('is 0 for black and 1 for white', () => {
+    expect(relativeLuminance('#000000')).toBe(0);
+    expect(relativeLuminance('#ffffff')).toBeCloseTo(1, 5);
+  });
+
+  it('rejects anything that is not #rrggbb', () => {
+    expect(relativeLuminance('ffffff')).toBeUndefined();
+    expect(relativeLuminance('#fff')).toBeUndefined();
+    expect(relativeLuminance('')).toBeUndefined();
+  });
+});
+
+describe('accentTextColor', () => {
+  it('uses dark text on the light macOS accent colours', () => {
+    expect(accentTextColor('#ffcc00')).toBe('#1d1d1f'); // yellow
+    expect(accentTextColor('#ff9500')).toBe('#1d1d1f'); // orange
+    expect(accentTextColor('#30d158')).toBe('#1d1d1f'); // green
+  });
+
+  it('uses white text on the dark macOS accent colours', () => {
+    expect(accentTextColor('#0a84ff')).toBe('#ffffff'); // blue
+    expect(accentTextColor('#8e8e93')).toBe('#ffffff'); // graphite
+    expect(accentTextColor('#bf5af2')).toBe('#ffffff'); // purple
+  });
+
+  it('falls back to white for anything that is not a colour', () => {
+    expect(accentTextColor('blue')).toBe('#ffffff');
+  });
+});
 
 describe('accentColorToCss', () => {
   it('drops the alpha channel and adds the hash', () => {

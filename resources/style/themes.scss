@@ -71,7 +71,8 @@
   // The system accent colour (set on the root element by the app), or the macOS blue
   --accent-color: var(--system-accent, #0a84ff);
   --accent-color-variation: var(--background-color-selected);
-  --accent-color-text: rgb(255, 255, 255);
+  // White unless the app sets a text colour that suits the system accent colour (see followSystemAccentColor)
+  --accent-color-text: var(--system-accent-text, rgb(255, 255, 255));
 
   --input-color: var(--shade1);
   --input-color-hover: var(--shade2);

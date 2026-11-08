@@ -29,11 +29,17 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
 
     // Copy style sheets from main window
     copyStyles(document, externalWindow.document);
+    copyAccentColor(document, externalWindow.document);
     containerEl.setAttribute('data-os', PLATFORM);
 
     // Hacky func for re-applying CSS to settings when changing that of the main window
     (window as any).reapplyPopupStyles = () => {
       copyStyles(document, externalWindow.document);
+      copyAccentColor(document, externalWindow.document);
+    };
+    // Called when the system accent colour changes
+    (window as any).reapplyPopupAccent = () => {
+      copyAccentColor(document, externalWindow.document);
     };
 
     externalWindow.addEventListener('beforeunload', props.onClose);
@@ -47,6 +53,7 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
     }
 
     return function cleanup() {
+      delete (window as any).reapplyPopupAccent;
       externalWindow.close();
       setWin(undefined);
     };
@@ -66,6 +73,18 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
 };
 
 export default PopupWindow;
+
+/** The system accent colour is an inline style on the root element, which is not part of the style sheets */
+function copyAccentColor(sourceDoc: Document, targetDoc: Document) {
+  for (const property of ['--system-accent', '--system-accent-text']) {
+    const value = sourceDoc.documentElement.style.getPropertyValue(property);
+    if (value) {
+      targetDoc.documentElement.style.setProperty(property, value);
+    } else {
+      targetDoc.documentElement.style.removeProperty(property);
+    }
+  }
+}
 
 function copyStyles(sourceDoc: Document, targetDoc: Document) {
   // First clear any existing styles

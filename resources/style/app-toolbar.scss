@@ -26,11 +26,6 @@
       color: var(--ui-text);
     }
 
-    &:focus-visible {
-      outline: 2px solid var(--accent-color);
-      outline-offset: 1px;
-    }
-
     // Pressed is shown by a tint as well as by the stronger colour, not by colour alone
     &[aria-pressed='true'],
     &[aria-checked='true'] {
@@ -122,11 +117,6 @@
       color: var(--accent-color);
     }
   }
-
-  &:focus-visible {
-    outline: 2px solid var(--accent-color);
-    outline-offset: 1px;
-  }
 }
 
 // The popover itself: the Flyout's own frame is restyled to match
@@ -160,11 +150,6 @@
     border: 0;
     cursor: default;
     color: var(--ui-text);
-
-    &:focus-visible {
-      outline: 2px solid var(--accent-color);
-      outline-offset: 1px;
-    }
 
     &:disabled {
       cursor: default;

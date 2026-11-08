@@ -72,6 +72,7 @@ function initialize() {
 
   createWindow();
   createPreviewWindow();
+  followSystemAccentColor();
 
   // Initialize preferences file and its consequences
   try {
@@ -655,13 +656,16 @@ const broadcastAccentColor = () => {
     }
   }
 };
-if (IS_MAC) {
-  systemPreferences.subscribeNotification('AppleColorPreferencesChangedNotification', () =>
-    broadcastAccentColor(),
-  );
-} else {
-  systemPreferences.on('accent-color-changed', () => broadcastAccentColor());
-}
+// Subscribed in initialize(): the system notification API is only guaranteed to work after app ready
+const followSystemAccentColor = () => {
+  if (IS_MAC) {
+    systemPreferences.subscribeNotification('AppleColorPreferencesChangedNotification', () =>
+      broadcastAccentColor(),
+    );
+  } else {
+    systemPreferences.on('accent-color-changed', () => broadcastAccentColor());
+  }
+};
 
 MainMessenger.onDragExport(async (absolutePaths) => {
   if (mainWindow === null || absolutePaths.length === 0) {

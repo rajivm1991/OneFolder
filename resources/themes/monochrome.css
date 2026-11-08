@@ -33,7 +33,3 @@
   --titlebar-background-color-alt: hsl(216, 0%, 80%);
   --titlebar-color: #888;
 }
-
-.dark, .light {
-  --accent-color: #888;
-}

@@ -25,11 +25,6 @@
     border: 0;
     cursor: default;
 
-    &:focus-visible {
-      outline: 2px solid var(--accent-color);
-      outline-offset: 1px;
-    }
-
     &:disabled {
       opacity: 0.4;
     }
@@ -50,7 +45,7 @@
     padding: 0 12px;
     border-radius: 14px;
     background: var(--accent-color);
-    color: #fff;
+    color: var(--accent-color-text);
     font-weight: 600;
 
     &:hover:not(:disabled) {
