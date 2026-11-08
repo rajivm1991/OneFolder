@@ -50,7 +50,7 @@ const PrimaryCommands = observer(() => {
       <DateFilter />
 
       {/* <ViewCommand /> */}
-      {(uiStore.isMasonry || uiStore.isCalendar) && <ViewCommand />}
+      {uiStore.isMasonry && <ViewCommand />}
 
       <SortCommand />
     </>

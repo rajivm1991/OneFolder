@@ -16,13 +16,6 @@ const enum Tooltip {
 }
 
 export const SortCommand = observer(() => {
-  const { uiStore } = useStore();
-
-  // Hide sorting options in calendar view since they're not relevant
-  if (uiStore.isCalendar) {
-    return null;
-  }
-
   return (
     <MenuButton
       icon={IconSet.SORT}
@@ -102,25 +95,6 @@ const thumbnailSizeOptions = [
 
 export const LayoutMenuItems = observer(() => {
   const { uiStore } = useStore();
-
-  if (uiStore.isCalendar) {
-    return (
-      <MenuRadioGroup>
-        <MenuRadioItem
-          icon={IconSet.VIEW_LIST}
-          onClick={uiStore.setCalendarLayoutList}
-          checked={uiStore.calendarLayout === 'list'}
-          text="List"
-        />
-        <MenuRadioItem
-          icon={IconSet.VIEW_GRID}
-          onClick={uiStore.setCalendarLayoutGrid}
-          checked={uiStore.calendarLayout === 'grid'}
-          text="Grid"
-        />
-      </MenuRadioGroup>
-    );
-  }
 
   return (
     <MenuRadioGroup>
