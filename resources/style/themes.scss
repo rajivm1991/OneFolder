@@ -17,6 +17,8 @@
   --ui-hover: rgba(255, 255, 255, 0.07);
   --ui-float: #2c2e35;
   --accent-color-soft: color-mix(in srgb, var(--accent-color) 28%, transparent);
+  // The accent as a text colour, adjusted for contrast against the theme background (see followSystemAccentColor)
+  --accent-color-fg: var(--system-accent-fg-dark, var(--accent-color));
 
   --shade1: rgb(21, 23, 26);
   --shade2: rgb(18, 18, 24);
@@ -43,6 +45,7 @@
   --ui-hover: rgba(0, 0, 0, 0.05);
   --ui-float: #ffffff;
   --accent-color-soft: color-mix(in srgb, var(--accent-color) 16%, transparent);
+  --accent-color-fg: var(--system-accent-fg-light, var(--accent-color));
 
   --shade1: rgb(232, 232, 232);
   --shade2: rgb(221, 221, 221);

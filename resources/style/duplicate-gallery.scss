@@ -94,7 +94,7 @@
       &:hover:not(:disabled) {
         background: var(--surface-hover);
         border-color: var(--accent-color);
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
         transform: translateY(-1px);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
       }
@@ -144,7 +144,7 @@
     &__toggle-btn {
       background: none;
       border: none;
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
       font-size: 0.9rem;
       cursor: pointer;
       text-decoration: none;
@@ -179,7 +179,7 @@
       &:hover {
         background: var(--surface-hover);
         border-color: var(--accent-color);
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
       }
     }
   }
@@ -286,7 +286,7 @@
       }
 
       .algorithm-card__name {
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
       }
 
       .algorithm-card__description {
@@ -365,7 +365,7 @@
       border-left: 2px solid var(--border-color);
 
       strong {
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
         font-size: 0.85rem;
         font-weight: 600;
       }
@@ -481,7 +481,7 @@
       &:hover {
         background: var(--surface-hover);
         border-color: var(--accent-color);
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
       }
     }
 
@@ -519,7 +519,7 @@
       }
 
       .analyze-icon {
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
         opacity: 0.8;
         transform: scale(1.1);
         flex-shrink: 0;
@@ -549,7 +549,7 @@
 
       .analyze-filter-pill {
         background: var(--accent-color-bg);
-        color: var(--accent-color);
+        color: var(--accent-color-fg);
         font-size: 0.7rem;
         font-weight: 500;
         line-height: 1;
@@ -824,7 +824,7 @@
     &:hover {
       background: var(--accent-color-subtle);
       border-color: var(--accent-color);
-      color: var(--accent-color);
+      color: var(--accent-color-fg);
     }
 
     &:active {

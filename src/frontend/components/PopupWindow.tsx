@@ -38,9 +38,8 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
       copyAccentColor(document, externalWindow.document);
     };
     // Called when the system accent colour changes
-    (window as any).reapplyPopupAccent = () => {
-      copyAccentColor(document, externalWindow.document);
-    };
+    const reapplyAccent = () => copyAccentColor(document, externalWindow.document);
+    popupAccentCallbacks.add(reapplyAccent);
 
     externalWindow.addEventListener('beforeunload', props.onClose);
 
@@ -53,7 +52,7 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
     }
 
     return function cleanup() {
-      delete (window as any).reapplyPopupAccent;
+      popupAccentCallbacks.delete(reapplyAccent);
       externalWindow.close();
       setWin(undefined);
     };
@@ -74,9 +73,22 @@ const PopupWindow: React.FC<PopupWindowProps> = (props) => {
 
 export default PopupWindow;
 
+/** One entry per open popup window */
+const popupAccentCallbacks = new Set<() => void>();
+
+/** Copies the system accent colour from the main window to every open popup window */
+export function reapplyPopupAccents() {
+  popupAccentCallbacks.forEach((reapply) => reapply());
+}
+
 /** The system accent colour is an inline style on the root element, which is not part of the style sheets */
 function copyAccentColor(sourceDoc: Document, targetDoc: Document) {
-  for (const property of ['--system-accent', '--system-accent-text']) {
+  for (const property of [
+    '--system-accent',
+    '--system-accent-text',
+    '--system-accent-fg-light',
+    '--system-accent-fg-dark',
+  ]) {
     const value = sourceDoc.documentElement.style.getPropertyValue(property);
     if (value) {
       targetDoc.documentElement.style.setProperty(property, value);

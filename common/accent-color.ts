@@ -38,3 +38,49 @@ export function accentTextColor(accent: string): string {
   const luminance = relativeLuminance(accent);
   return luminance !== undefined && luminance > DARK_TEXT_LUMINANCE_THRESHOLD ? DARK_TEXT : LIGHT_TEXT;
 }
+
+/** WCAG contrast ratio (1 to 21) between two "#rrggbb" colours. Returns undefined if either is not a "#rrggbb" colour. */
+export function contrastRatio(a: string, b: string): number | undefined {
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === undefined || lb === undefined) {
+    return undefined;
+  }
+  return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
+}
+
+const MIN_FOREGROUND_CONTRAST = 4.5;
+
+/**
+ * The accent colour ("#rrggbb") to use as a foreground (text, links, icons) on top of the given background: the accent itself when it
+ * has enough contrast, otherwise mixed towards black (light background) or white (dark background) until it does.
+ * Returns the accent unchanged for anything that is not a "#rrggbb" colour.
+ */
+export function accentForegroundColor(
+  accent: string,
+  background: string,
+  minContrast = MIN_FOREGROUND_CONTRAST,
+): string {
+  const bgLuminance = relativeLuminance(background);
+  if (relativeLuminance(accent) === undefined || bgLuminance === undefined) {
+    return accent;
+  }
+  const target = bgLuminance > 0.5 ? 0 : 255;
+  const channels = [1, 3, 5].map((i) => parseInt(accent.slice(i, i + 2), 16));
+  for (let step = 0; step <= 20; step++) {
+    const t = step / 20;
+    const color =
+      '#' +
+      channels
+        .map((c) =>
+          Math.round(c + (target - c) * t)
+            .toString(16)
+            .padStart(2, '0'),
+        )
+        .join('');
+    if ((contrastRatio(color, background) ?? 0) >= minContrast) {
+      return color;
+    }
+  }
+  return target === 0 ? '#000000' : '#ffffff';
+}

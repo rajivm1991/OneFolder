@@ -12,7 +12,8 @@ import { autorun, reaction, runInAction } from 'mobx';
 import React from 'react';
 import { Root, createRoot } from 'react-dom/client';
 
-import { accentTextColor } from 'common/accent-color';
+import { accentForegroundColor, accentTextColor } from 'common/accent-color';
+import { reapplyPopupAccents } from './frontend/components/PopupWindow';
 import { IS_DEV } from 'common/process';
 import { IS_PREVIEW_WINDOW, WINDOW_STORAGE_KEY } from 'common/window';
 import { RendererMessenger } from 'src/ipc/renderer';
@@ -314,6 +315,10 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
   }
 }
 
+// Keep in sync with --background-color in resources/style/themes.scss
+const LIGHT_THEME_BACKGROUND = '#f0f0f0';
+const DARK_THEME_BACKGROUND = '#1c1e23';
+
 /** The theme's accent colour follows the system accent colour; the stylesheet falls back to the macOS blue */
 function followSystemAccentColor() {
   const apply = (color: string | undefined) => {
@@ -321,12 +326,17 @@ function followSystemAccentColor() {
     if (color) {
       style.setProperty('--system-accent', color);
       style.setProperty('--system-accent-text', accentTextColor(color));
+      // The accent as a foreground colour, adjusted for contrast against each theme's background
+      style.setProperty('--system-accent-fg-light', accentForegroundColor(color, LIGHT_THEME_BACKGROUND));
+      style.setProperty('--system-accent-fg-dark', accentForegroundColor(color, DARK_THEME_BACKGROUND));
     } else {
       style.removeProperty('--system-accent');
       style.removeProperty('--system-accent-text');
+      style.removeProperty('--system-accent-fg-light');
+      style.removeProperty('--system-accent-fg-dark');
     }
     // Popup windows (Settings, Help, About) have their own document
-    (window as any).reapplyPopupAccent?.();
+    reapplyPopupAccents();
   };
   apply(RendererMessenger.getAccentColor());
   RendererMessenger.onAccentColorChanged(apply);

@@ -657,7 +657,13 @@ const broadcastAccentColor = () => {
   }
 };
 // Subscribed in initialize(): the system notification API is only guaranteed to work after app ready
+// initialize() can run again (second-instance), so subscribe only once
+let followingSystemAccentColor = false;
 const followSystemAccentColor = () => {
+  if (followingSystemAccentColor) {
+    return;
+  }
+  followingSystemAccentColor = true;
   if (IS_MAC) {
     systemPreferences.subscribeNotification('AppleColorPreferencesChangedNotification', () =>
       broadcastAccentColor(),
