@@ -9,6 +9,13 @@ import { useStore } from '../../contexts/StoreContext';
 const OutlinerToggle = observer(() => {
   const { uiStore } = useStore();
 
+  // This button is replaced by the other toggle when the sidebar shows or hides, which drops focus to the body.
+  // Only done for clicks: hotkeys should not move focus.
+  const handleClick = () => {
+    uiStore.toggleOutliner();
+    requestAnimationFrame(() => document.getElementById('outliner-toggle')?.focus());
+  };
+
   return (
     <ToolbarButton
       id="outliner-toggle"
@@ -16,7 +23,7 @@ const OutlinerToggle = observer(() => {
       icon={uiStore.isOutlinerOpen ? IconSet.DOUBLE_CARET : IconSet.MENU_HAMBURGER}
       controls="outliner"
       pressed={uiStore.isOutlinerOpen}
-      onClick={uiStore.toggleOutliner}
+      onClick={handleClick}
       tabIndex={0}
     />
   );
