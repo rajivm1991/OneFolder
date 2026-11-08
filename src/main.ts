@@ -11,12 +11,14 @@ import {
   session,
   shell,
   Rectangle,
+  systemPreferences,
 } from 'electron';
 import path from 'path';
 import fse from 'fs-extra';
 import { autoUpdater, UpdateInfo } from 'electron-updater';
 import TrayIcon from '../resources/logo/png/full-color/onefolder-logomark-fc-256x256.png';
 import AppIcon from '../resources/logo/png/full-color/onefolder-logomark-fc-512x512.png';
+import { accentColorToCss } from '../common/accent-color';
 import { createBugReport, githubUrl } from '../common/config';
 import { IS_DEV, IS_MAC } from '../common/process';
 import { MainMessenger } from './ipc/main';
@@ -635,6 +637,31 @@ MainMessenger.onSendPreviewFiles((msg) => {
 
 // Set native window theme (frame, menu bar)
 MainMessenger.onSetTheme((msg) => (nativeTheme.themeSource = msg.theme));
+
+// The system accent colour (macOS and Windows) is used as the app's accent colour
+const getSystemAccentColor = (): string | undefined => {
+  try {
+    return accentColorToCss(systemPreferences.getAccentColor?.());
+  } catch (e) {
+    return undefined;
+  }
+};
+MainMessenger.onGetAccentColor(getSystemAccentColor);
+const broadcastAccentColor = () => {
+  const color = getSystemAccentColor();
+  for (const win of [mainWindow, previewWindow]) {
+    if (win && !win.isDestroyed()) {
+      MainMessenger.accentColorChanged(win.webContents, color);
+    }
+  }
+};
+if (IS_MAC) {
+  systemPreferences.subscribeNotification('AppleColorPreferencesChangedNotification', () =>
+    broadcastAccentColor(),
+  );
+} else {
+  systemPreferences.on('accent-color-changed', () => broadcastAccentColor());
+}
 
 MainMessenger.onDragExport(async (absolutePaths) => {
   if (mainWindow === null || absolutePaths.length === 0) {

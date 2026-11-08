@@ -202,6 +202,8 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
 
   RendererMessenger.onFullScreenChanged((val) => rootStore.uiStore.setFullScreen(val));
 
+  followSystemAccentColor();
+
   RendererMessenger.onClosedPreviewWindow(() => {
     rootStore.uiStore.closePreviewWindow();
   });
@@ -311,7 +313,21 @@ async function runMainApp(contextPath: string, userDataPath: string, root: Root)
   }
 }
 
+/** The theme's accent colour follows the system accent colour; the stylesheet falls back to the macOS blue */
+function followSystemAccentColor() {
+  const apply = (color: string | undefined) => {
+    if (color) {
+      document.documentElement.style.setProperty('--system-accent', color);
+    } else {
+      document.documentElement.style.removeProperty('--system-accent');
+    }
+  };
+  apply(RendererMessenger.getAccentColor());
+  RendererMessenger.onAccentColorChanged(apply);
+}
+
 async function runPreviewApp(contextPath: string, root: Root): Promise<void> {
+  followSystemAccentColor();
   const backend = await SqliteBackend.init(contextPath, () => {});
   // The preview window never schedules backups, but point it at the same per-context directory
   // as the main window for consistency.

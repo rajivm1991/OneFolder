@@ -1,6 +1,5 @@
 // The toolbar follows the approved mockup: title and count on the left, search in the middle, the other controls as
-// 28px icon buttons on the right. The colours are the mockup tokens that the date filter defines (--df-*, below) until
-// the app-wide theme chunk replaces the theme variables.
+// 28px icon buttons on the right. The colours are the theme tokens (resources/style/themes.scss).
 #toolbar {
   justify-content: stretch;
   gap: 4px;
@@ -13,9 +12,9 @@
     min-width: 28px;
     min-height: 28px;
     padding: 0 6px;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
 
     // Icon-only buttons are square
     &[data-collapsible='true'] {
@@ -23,21 +22,21 @@
     }
 
     &:hover {
-      background: var(--df-hover);
-      color: var(--df-text);
+      background: var(--ui-hover);
+      color: var(--ui-text);
     }
 
     &:focus-visible {
-      outline: 2px solid var(--df-accent);
+      outline: 2px solid var(--accent-color);
       outline-offset: 1px;
     }
 
     // Pressed is shown by a tint as well as by the stronger colour, not by colour alone
     &[aria-pressed='true'],
     &[aria-checked='true'] {
-      background: var(--df-accent-soft);
-      box-shadow: inset 0 0 0 1px var(--df-accent);
-      color: var(--df-text);
+      background: var(--accent-color-soft);
+      box-shadow: inset 0 0 0 1px var(--accent-color);
+      color: var(--ui-text);
     }
   }
 
@@ -67,51 +66,26 @@
   min-width: 0;
   max-width: 30%;
   margin-left: 8px;
-  color: var(--df-text);
+  color: var(--ui-text);
 
   &__name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 15px;
+    font-size: var(--font-size-title);
     font-weight: 600;
   }
 
   span {
     flex: none;
-    font-size: 11px;
-    color: var(--df-sec);
+    font-size: var(--font-size-small);
+    color: var(--ui-text-secondary);
   }
 }
 
 // Date filter: a pill in the toolbar that opens a popover with year chips, a whole-year row and a 4x3 month grid.
-// Sizes, radii, spacing and colours follow the approved mockup (the "open date filter" boards). The mockup's own colours
-// are used here, scoped to the filter, until the app-wide theme chunk replaces the theme variables.
-.dark {
-  --df-text: #f5f5f7;
-  --df-sec: #a1a1a8;
-  --df-line: rgba(255, 255, 255, 0.09);
-  --df-hover: rgba(255, 255, 255, 0.07);
-  --df-float: #2c2e35;
-  --df-accent-soft: rgba(10, 132, 255, 0.28);
-}
-
-.light {
-  --df-text: #1d1d1f;
-  --df-sec: #66666c;
-  --df-line: rgba(0, 0, 0, 0.1);
-  --df-hover: rgba(0, 0, 0, 0.05);
-  --df-float: #ffffff;
-  --df-accent-soft: rgba(10, 132, 255, 0.16);
-}
-
-.dark,
-.light {
-  // The macOS blue; becomes the system accent colour with the theme chunk
-  --df-accent: #0a84ff;
-}
-
+// Sizes, radii, spacing and colours follow the approved mockup (the "open date filter" boards). The colours are the theme tokens.
 // The pill that opens the popover
 .date-filter__trigger {
   display: inline-flex;
@@ -123,34 +97,34 @@
   border: 0;
   font: inherit;
   cursor: default;
-  color: var(--df-text);
+  color: var(--ui-text);
   background: transparent;
 
   svg:first-child {
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
   }
 
   svg:last-child {
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
   }
 
   &:hover {
-    background: var(--df-hover);
+    background: var(--ui-hover);
   }
 
   // Open, or a date is chosen: tinted, bold and accent icon (not colour alone)
   &[aria-expanded='true'],
   &.is-active {
-    background: var(--df-accent-soft);
+    background: var(--accent-color-soft);
     font-weight: 600;
 
     svg:first-child {
-      color: var(--df-accent);
+      color: var(--accent-color);
     }
   }
 
   &:focus-visible {
-    outline: 2px solid var(--df-accent);
+    outline: 2px solid var(--accent-color);
     outline-offset: 1px;
   }
 }
@@ -158,9 +132,9 @@
 // The popover itself: the Flyout's own frame is restyled to match
 [data-flyout]:has(> .date-filter) {
   border: 0;
-  border-radius: 12px;
-  background: var(--df-float);
-  box-shadow: 0 0 0 0.5px var(--df-line), 0 12px 40px rgba(0, 0, 0, 0.4);
+  border-radius: var(--radius-lg);
+  background: var(--ui-float);
+  box-shadow: 0 0 0 0.5px var(--ui-line), 0 12px 40px rgba(0, 0, 0, 0.4);
   overflow: hidden;
 }
 
@@ -172,8 +146,8 @@
   flex-direction: column;
   gap: 10px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-  font-size: 13px;
-  color: var(--df-text);
+  font-size: var(--font-size-body);
+  color: var(--ui-text);
 
   // Takes focus when the popover opens, so that it can be dismissed; not a control, so no ring
   &:focus {
@@ -185,10 +159,10 @@
     font: inherit;
     border: 0;
     cursor: default;
-    color: var(--df-text);
+    color: var(--ui-text);
 
     &:focus-visible {
-      outline: 2px solid var(--df-accent);
+      outline: 2px solid var(--accent-color);
       outline-offset: 1px;
     }
 
@@ -199,12 +173,12 @@
 
   &__notice {
     margin: 0;
-    font-size: 11px;
-    color: var(--df-sec);
+    font-size: var(--font-size-small);
+    color: var(--ui-text-secondary);
 
     button {
       background: transparent;
-      color: var(--df-accent);
+      color: var(--accent-color);
       font-weight: 600;
       padding: 0;
       text-decoration: underline;
@@ -214,7 +188,7 @@
   &__empty {
     margin: 0;
     padding: 8px 0;
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
   }
 
   &__years {
@@ -230,13 +204,13 @@
     width: 28px;
     height: 28px;
     padding: 0;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
 
     &:hover:not(:disabled) {
-      background: var(--df-hover);
-      color: var(--df-text);
+      background: var(--ui-hover);
+      color: var(--ui-text);
     }
 
     &:disabled {
@@ -253,14 +227,14 @@
     background: transparent;
 
     &:hover {
-      background: var(--df-hover);
+      background: var(--ui-hover);
     }
 
     // The chosen year: tinted, bold and ringed (not colour alone)
     &[aria-pressed='true'] {
-      background: var(--df-accent-soft);
+      background: var(--accent-color-soft);
       font-weight: 700;
-      box-shadow: inset 0 0 0 1.5px var(--df-accent);
+      box-shadow: inset 0 0 0 1.5px var(--accent-color);
     }
   }
 
@@ -276,18 +250,18 @@
     text-align: left;
 
     &:hover:not(:disabled) {
-      background: var(--df-hover);
+      background: var(--ui-hover);
     }
 
     &:disabled {
-      color: var(--df-sec);
+      color: var(--ui-text-secondary);
     }
 
     // Chosen: same treatment as a chosen year
     &[aria-pressed='true'] {
-      background: var(--df-accent-soft);
+      background: var(--accent-color-soft);
       font-weight: 700;
-      box-shadow: inset 0 0 0 1.5px var(--df-accent);
+      box-shadow: inset 0 0 0 1.5px var(--accent-color);
     }
 
     > :first-child {
@@ -309,9 +283,9 @@
     gap: 2px;
     height: 56px;
     padding: 0 10px;
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     text-align: left;
-    background: var(--df-hover);
+    background: var(--ui-hover);
 
     > :first-child {
       font-weight: 600;
@@ -323,13 +297,13 @@
 
     &:disabled {
       background: transparent;
-      color: var(--df-sec);
-      box-shadow: inset 0 0 0 0.5px var(--df-line);
+      color: var(--ui-text-secondary);
+      box-shadow: inset 0 0 0 0.5px var(--ui-line);
     }
 
     // The chosen month: solid accent with white text, as in the mockup
     &[aria-pressed='true'] {
-      background: var(--df-accent);
+      background: var(--accent-color);
       color: #fff;
 
       .date-filter__count {
@@ -339,9 +313,9 @@
   }
 
   &__count {
-    font-size: 11px;
+    font-size: var(--font-size-small);
     font-weight: 400;
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
   }
 
   &__footer {
@@ -349,20 +323,20 @@
     align-items: center;
     margin: 0 -12px;
     padding: 10px 12px 0;
-    box-shadow: inset 0 0.5px 0 var(--df-line);
+    box-shadow: inset 0 0.5px 0 var(--ui-line);
   }
 
   &__summary {
     flex: 1;
-    font-size: 11px;
-    color: var(--df-sec);
+    font-size: var(--font-size-small);
+    color: var(--ui-text-secondary);
   }
 
   &__clear {
     padding: 4px 6px;
     border-radius: 5px;
     background: transparent;
-    color: var(--df-accent);
+    color: var(--accent-color);
     font-weight: 600;
 
     &:disabled {
@@ -381,16 +355,16 @@
   .input {
     border: 0;
     border-radius: 7px;
-    background: var(--df-hover);
-    box-shadow: inset 0 0 0 0.5px var(--df-line);
+    background: var(--ui-hover);
+    box-shadow: inset 0 0 0 0.5px var(--ui-line);
 
     &:hover {
-      background: var(--df-hover);
+      background: var(--ui-hover);
     }
 
     &:focus-within {
-      background: var(--df-hover);
-      box-shadow: 0 0 0 3px var(--df-accent-soft), inset 0 0 0 1px var(--df-accent);
+      background: var(--ui-hover);
+      box-shadow: 0 0 0 3px var(--accent-color-soft), inset 0 0 0 1px var(--accent-color);
     }
   }
 

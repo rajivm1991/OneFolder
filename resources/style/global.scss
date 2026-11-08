@@ -6,8 +6,18 @@
 *::before {
   user-select: none;
 }
-// Disable default outline on focused elements (e.g. clicked buttons)
-:focus {
+// No outline when clicking, but a ring in the accent colour when navigating with the keyboard.
+// Text fields draw their own focus ring.
+:focus:not(:focus-visible) {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
   outline: none;
 }
 
@@ -32,7 +42,7 @@ img {
 }
 
 a {
-  color: var(--accent-color-blue);
+  color: var(--accent-color);
   text-underline-offset: 2px;
   text-decoration-thickness: 2px;
   transition: text-decoration-color 0.2s ease-in-out 0.1s;
@@ -80,7 +90,7 @@ select {
   color: var(--text-color);
   border: 0.0625rem solid var(--border-color);
   outline: none;
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   line-height: 1.5rem;
   min-height: 1.5rem;
 

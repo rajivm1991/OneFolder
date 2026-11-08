@@ -1,6 +1,8 @@
 import { ipcRenderer } from 'electron';
 import path from 'path';
 import {
+  ACCENT_COLOR_CHANGED,
+  GET_ACCENT_COLOR,
   CHECK_FOR_UPDATES,
   CLEAR_DATABASE,
   CLOSED_PREVIEW_WINDOW,
@@ -87,7 +89,12 @@ export class RendererMessenger {
   static onFullScreenChanged = (cb: (val: boolean) => void) =>
     ipcRenderer.on(FULL_SCREEN_CHANGED, (_, val: boolean) => cb(val));
 
-  static setZoomFactor = (level: number) => ipcRenderer.invoke(SET_ZOOM_FACTOR, level);
+  static getAccentColor = (): string | undefined => ipcRenderer.sendSync(GET_ACCENT_COLOR);
+
+  static onAccentColorChanged = (cb: (color: string | undefined) => void) =>
+    ipcRenderer.on(ACCENT_COLOR_CHANGED, (_, color: string | undefined) => cb(color));
+
+  static setZoomFactor =(level: number) => ipcRenderer.invoke(SET_ZOOM_FACTOR, level);
 
   static getZoomFactor = (): number => ipcRenderer.sendSync(GET_ZOOM_FACTOR);
 

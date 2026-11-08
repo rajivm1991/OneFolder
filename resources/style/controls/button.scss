@@ -77,14 +77,14 @@ button {
 .btn-minimal,
 .btn-filled,
 .btn-outlined {
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   min-height: 2rem;
   min-width: 2rem;
   padding: 0 0.75rem;
 }
 
 .btn-icon {
-  border-radius: 0.25rem;
+  border-radius: var(--radius-sm);
   color: currentColor;
   height: fit-content;
   width: fit-content;

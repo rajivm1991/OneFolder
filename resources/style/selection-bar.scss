@@ -1,6 +1,5 @@
 // The bar floating at the bottom of the content area while files are selected.
-// Sizes, radii and spacing follow the approved mockup. The colours are the mockup tokens that the date filter defines
-// (--df-*), until the app-wide theme chunk replaces the theme variables.
+// Sizes, radii and spacing follow the approved mockup. The colours are the theme tokens (resources/style/themes.scss).
 .selection-bar {
   position: absolute;
   left: 50%;
@@ -13,11 +12,11 @@
   height: 44px;
   padding: 0 8px 0 16px;
   border-radius: 22px;
-  background: var(--df-float);
-  color: var(--df-text);
-  box-shadow: 0 0 0 0.5px var(--df-line), 0 8px 28px rgba(0, 0, 0, 0.35);
+  background: var(--ui-float);
+  color: var(--ui-text);
+  box-shadow: 0 0 0 0.5px var(--ui-line), 0 8px 28px rgba(0, 0, 0, 0.35);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
-  font-size: 13px;
+  font-size: var(--font-size-body);
   // The bar is not part of the window drag region
   -webkit-app-region: no-drag;
 
@@ -27,7 +26,7 @@
     cursor: default;
 
     &:focus-visible {
-      outline: 2px solid var(--df-accent);
+      outline: 2px solid var(--accent-color);
       outline-offset: 1px;
     }
 
@@ -50,7 +49,7 @@
     height: 28px;
     padding: 0 12px;
     border-radius: 14px;
-    background: var(--df-accent);
+    background: var(--accent-color);
     color: #fff;
     font-weight: 600;
 
@@ -66,13 +65,13 @@
     width: 28px;
     height: 28px;
     padding: 0;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--df-sec);
+    color: var(--ui-text-secondary);
 
     &:hover:not(:disabled) {
-      background: var(--df-hover);
-      color: var(--df-text);
+      background: var(--ui-hover);
+      color: var(--ui-text);
     }
   }
 
