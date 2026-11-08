@@ -581,7 +581,8 @@ class UiStore {
   }
 
   @action.bound openToolbarTagPopover(): void {
-    if (this.fileSelection.size > 0) {
+    // Missing files cannot be tagged and have no tag editor that could close it again
+    if (this.fileSelection.size > 0 && !this.rootStore.fileStore.showsMissingContent) {
       this.isToolbarTagPopoverOpen = true;
     }
   }

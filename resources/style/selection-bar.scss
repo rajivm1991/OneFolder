@@ -81,4 +81,11 @@
     top: auto;
     bottom: calc(100% + 12px);
   }
+
+  // The panel grows upwards from the bar, so dragging the bottom edge to resize would feel inverted, and a
+  // fixed maximum could run under the toolbar in a short window
+  #tag-editor {
+    resize: none;
+    max-height: min(32rem, calc(100vh - 14rem));
+  }
 }

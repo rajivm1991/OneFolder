@@ -3,6 +3,7 @@ import React from 'react';
 
 import { FileRemoval } from '../../components/RemovalAlert';
 import { useStore } from '../../contexts/StoreContext';
+import FocusManager from '../../FocusManager';
 import { TagEditorPopover } from '../AppToolbar/FileTagEditor';
 
 /**
@@ -14,20 +15,26 @@ const SelectionBar = observer(() => {
   const count = uiStore.fileSelection.size;
   const showsMissing = fileStore.showsMissingContent;
 
-  // Stays while the tag editor is open, even if the selection was emptied meanwhile, so the editor does not vanish
-  if (uiStore.isSlideMode || (count === 0 && !uiStore.isToolbarTagPopoverOpen)) {
+  // Stays while the tag editor is open, even if the selection was emptied meanwhile, so the editor does not vanish.
+  // Missing files cannot be tagged and have no editor, so the bar must not wait for one there
+  const keepForTagEditor = uiStore.isToolbarTagPopoverOpen && !showsMissing;
+  if (uiStore.isSlideMode || (count === 0 && !keepForTagEditor)) {
     return null;
   }
 
   // Missing files cannot be tagged, they can only be removed from the library
   const handleDelete = showsMissing ? uiStore.openToolbarFileRemover : uiStore.openMoveFilesToTrash;
 
+  // The bar disappears with the selection, taking focus with it: hand focus back to the gallery
+  const handleClear = () => {
+    uiStore.clearFileSelection();
+    FocusManager.focusGallery();
+  };
+
   return (
     <>
-      <div className="selection-bar" role="toolbar" aria-label="Selection actions">
-        <span className="selection-bar__count" role="status">
-          {count.toLocaleString()} selected
-        </span>
+      <div className="selection-bar" role="group" aria-label="Selection actions">
+        <span className="selection-bar__count">{count.toLocaleString()} selected</span>
 
         {!showsMissing && (
           <>
@@ -88,8 +95,8 @@ const SelectionBar = observer(() => {
           type="button"
           className="selection-bar__icon"
           aria-label="Clear selection"
-          title="Clear selection (Esc)"
-          onClick={uiStore.clearFileSelection}
+          title="Clear selection"
+          onClick={handleClear}
         >
           <svg
             width="14"
