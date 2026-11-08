@@ -690,10 +690,11 @@ export class SqliteBackend implements DataStorage {
   }
 
   async countFilesByMonth(): Promise<MonthCount[]> {
-    const rows = this.#db.prepare('SELECT dateCreated FROM files').all() as {
-      dateCreated: string;
-    }[];
-    return countByMonth(rows.map((row) => new Date(row.dateCreated)));
+    // The date taken, or until the dateTaken backfill reaches a file, when it was created on disk
+    const rows = this.#db
+      .prepare('SELECT COALESCE(dateTaken, dateCreated) AS date FROM files')
+      .all() as { date: string }[];
+    return countByMonth(rows.map((row) => new Date(row.date)));
   }
 
   async clearFilesOnly(): Promise<void> {

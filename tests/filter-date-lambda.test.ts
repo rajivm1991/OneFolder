@@ -17,6 +17,23 @@ describe('filterDateLambda', () => {
     expect(matches('equals', after)).toBe(false);
   });
 
+  describe('dateTaken key', () => {
+    const matchesTaken = (file: any): boolean =>
+      filterDateLambda({ key: 'dateTaken', valueType: 'date', operator: 'equals', value: day } as any)(file);
+
+    it('equals uses dateTaken when set', () => {
+      expect(matchesTaken({ dateTaken: same, dateCreated: before })).toBe(true);
+      expect(matchesTaken({ dateTaken: before, dateCreated: same })).toBe(false);
+      expect(matchesTaken({ dateTaken: after, dateCreated: same })).toBe(false);
+    });
+
+    it('equals falls back to dateCreated when dateTaken is undefined', () => {
+      expect(matchesTaken({ dateTaken: undefined, dateCreated: same })).toBe(true);
+      expect(matchesTaken({ dateTaken: undefined, dateCreated: before })).toBe(false);
+      expect(matchesTaken({ dateTaken: undefined, dateCreated: after })).toBe(false);
+    });
+  });
+
   it('notEqual matches dates outside the chosen day', () => {
     expect(matches('notEqual', same)).toBe(false);
     expect(matches('notEqual', before)).toBe(true);

@@ -350,6 +350,35 @@ describe('SqliteBackend', () => {
     expect(desc.map((f) => f.id)).toEqual(['recent-photo', 'unresolved', 'old-photo-new-copy']);
   });
 
+  it('counts files per month of their dateTaken, or of their dateCreated until it is known', async () => {
+    const backend = await initBackend();
+    await backend.createFilesFromPath('/drives/school', [
+      createMockFile({
+        id: 'a',
+        absolutePath: '/drives/school/a.jpg',
+        dateCreated: new Date(2024, 0, 15), // copied in January
+        dateTaken: new Date(2015, 4, 5), // shot in May 2015
+      }),
+      createMockFile({
+        id: 'b',
+        absolutePath: '/drives/school/b.jpg',
+        dateCreated: new Date(2024, 0, 16),
+        dateTaken: new Date(2015, 4, 20),
+      }),
+      createMockFile({
+        id: 'c',
+        absolutePath: '/drives/school/c.jpg',
+        dateCreated: new Date(2019, 8, 9),
+        dateTaken: null,
+      }),
+    ]);
+
+    expect(await backend.countFilesByMonth()).toEqual([
+      { year: 2019, month: 8, count: 1 },
+      { year: 2015, month: 4, count: 2 },
+    ]);
+  });
+
   it('createFilesFromPath escapes LIKE metacharacters in the path when detecting duplicates', async () => {
     const backend = await initBackend();
     const file = createMockFile({

@@ -157,8 +157,9 @@ describe('Backend', () => {
     expect(saved.lng).toBe(2.3522);
   });
 
-  test('countFilesByMonth counts files per month of their creation date', async (backend) => {
+  test('countFilesByMonth falls back to the creation date when date taken is unknown', async (backend) => {
     const files = createMockFiles(4);
+    files.forEach((file) => (file.dateTaken = null));
     files[0].dateCreated = new Date(2024, 2, 3);
     files[1].dateCreated = new Date(2024, 2, 30);
     files[2].dateCreated = new Date(2023, 11, 31);
@@ -169,6 +170,20 @@ describe('Backend', () => {
       { year: 2024, month: 3, count: 1 },
       { year: 2024, month: 2, count: 2 },
       { year: 2023, month: 11, count: 1 },
+    ]);
+  });
+
+  test('countFilesByMonth counts by date taken when it differs from the creation date', async (backend) => {
+    const files = createMockFiles(2);
+    files[0].dateCreated = new Date(2024, 2, 3);
+    files[0].dateTaken = new Date(2021, 5, 10);
+    files[1].dateCreated = new Date(2024, 2, 5);
+    files[1].dateTaken = null;
+    await backend.saveFiles(files);
+
+    expect(await backend.countFilesByMonth()).toEqual([
+      { year: 2024, month: 2, count: 1 },
+      { year: 2021, month: 5, count: 1 },
     ]);
   });
 
